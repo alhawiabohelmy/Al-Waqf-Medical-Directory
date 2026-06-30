@@ -1,0 +1,6 @@
+{
+  "name": "دليل الوقف الطبي",
+  "description": "دليل طبي إلكتروني لخدمة أهالي مركز الوقف بمحافظة قنا يسهل الوصول للأطباء والصيدليات والمعامل",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
