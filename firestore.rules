@@ -1,10 +1,33 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /requests/{requestId} {
+    // 1. Doctors Directory
+    match /doctors/{doctorId} {
       allow read, write: if true;
     }
-    match /{document=**} {
+
+    // 2. Pharmacies Directory
+    match /pharmacies/{pharmacyId} {
+      allow read, write: if true;
+    }
+
+    // 3. Labs and Scan Centers Directory
+    match /labs/{labId} {
+      allow read, write: if true;
+    }
+
+    // 4. Advertisements
+    match /ads/{adId} {
+      allow read, write: if true;
+    }
+
+    // 5. System Settings and Specialties
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // 6. User and Doctor requests
+    match /requests/{requestId} {
       allow read, write: if true;
     }
   }

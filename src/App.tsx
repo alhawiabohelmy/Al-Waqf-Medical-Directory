@@ -100,7 +100,6 @@ export default function App() {
   const handleUpdateDoctors = (value: Doctor[] | ((prev: Doctor[]) => Doctor[])) => {
     setDoctors((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      syncCollectionToFirestore('doctors', prev, resolved);
       return resolved;
     });
   };
@@ -108,7 +107,6 @@ export default function App() {
   const handleUpdatePharmacies = (value: Pharmacy[] | ((prev: Pharmacy[]) => Pharmacy[])) => {
     setPharmacies((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      syncCollectionToFirestore('pharmacies', prev, resolved);
       return resolved;
     });
   };
@@ -116,7 +114,6 @@ export default function App() {
   const handleUpdateLabs = (value: Lab[] | ((prev: Lab[]) => Lab[])) => {
     setLabs((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      syncCollectionToFirestore('labs', prev, resolved);
       return resolved;
     });
   };
@@ -124,7 +121,6 @@ export default function App() {
   const handleUpdateAds = (value: Ad[] | ((prev: Ad[]) => Ad[])) => {
     setAds((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      syncCollectionToFirestore('ads', prev, resolved);
       return resolved;
     });
   };
@@ -132,9 +128,6 @@ export default function App() {
   const handleUpdateSpecialties = (value: string[] | ((prev: string[]) => string[])) => {
     setSpecialties((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      setDoc(doc(db, 'config', 'specialties'), { list: resolved }).catch(err => {
-        console.error("Error saving specialties to Firestore:", err);
-      });
       return resolved;
     });
   };
@@ -142,8 +135,8 @@ export default function App() {
   const handleUpdateConfig = (value: HomePageConfig | ((prev: HomePageConfig) => HomePageConfig)) => {
     setConfig((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      setDoc(doc(db, 'config', 'main'), resolved).catch(err => {
-        console.error("Error saving config to Firestore:", err);
+      setDoc(doc(db, 'settings', 'main'), resolved).catch(err => {
+        console.error("Error saving config to Firestore settings/main:", err);
       });
       return resolved;
     });
@@ -152,7 +145,6 @@ export default function App() {
   const handleUpdateDoctorRequests = (value: DoctorRequest[] | ((prev: DoctorRequest[]) => DoctorRequest[])) => {
     setDoctorRequests((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      syncCollectionToFirestore('requests', prev, resolved);
       return resolved;
     });
   };
@@ -163,22 +155,22 @@ export default function App() {
       try {
         console.log("Fetching all data collections from Firestore...");
 
-        // 1. Fetch config
-        const configSnap = await getDoc(doc(db, 'config', 'main'));
+        // 1. Fetch config from settings/main
+        const configSnap = await getDoc(doc(db, 'settings', 'main'));
         if (configSnap.exists()) {
           setConfig(configSnap.data() as HomePageConfig);
         } else {
           // Initialize config in DB if empty
-          await setDoc(doc(db, 'config', 'main'), INITIAL_HOME_CONFIG);
+          await setDoc(doc(db, 'settings', 'main'), INITIAL_HOME_CONFIG);
         }
 
-        // 2. Fetch specialties
-        const specialtiesSnap = await getDoc(doc(db, 'config', 'specialties'));
+        // 2. Fetch specialties from settings/specialties
+        const specialtiesSnap = await getDoc(doc(db, 'settings', 'specialties'));
         if (specialtiesSnap.exists()) {
           setSpecialties((specialtiesSnap.data() as { list: string[] }).list);
         } else {
           // Initialize specialties in DB if empty
-          await setDoc(doc(db, 'config', 'specialties'), { list: INITIAL_SPECIALTIES });
+          await setDoc(doc(db, 'settings', 'specialties'), { list: INITIAL_SPECIALTIES });
         }
 
         // 3. Fetch doctors
@@ -213,16 +205,7 @@ export default function App() {
         });
         setAds(adList);
 
-        // 7. Fetch logs
-        const logsSnap = await getDocs(collection(db, 'logs'));
-        const logList: ActivityLog[] = [];
-        logsSnap.forEach((lo) => {
-          logList.push({ id: lo.id, ...lo.data() } as ActivityLog);
-        });
-        logList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setLogs(logList);
-
-        // 8. Fetch requests
+        // 7. Fetch requests
         const reqsSnap = await getDocs(collection(db, 'requests'));
         const reqList: DoctorRequest[] = [];
         reqsSnap.forEach((r) => {

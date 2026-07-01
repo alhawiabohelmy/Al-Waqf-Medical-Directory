@@ -5,6 +5,8 @@ import {
   Clock, XCircle, Search, Save, ClipboardList, Eye, EyeOff
 } from 'lucide-react';
 import { Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest } from '../data/initialData';
+import { db } from '../lib/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface AdminPanelProps {
   adminLoggedIn: boolean;
@@ -82,7 +84,7 @@ export default function AdminPanel({
   };
 
   // --- ACTIONS FOR SERVICE ADDITION REQUESTS ---
-  const acceptAndPublishRequest = (req: DoctorRequest) => {
+  const acceptAndPublishRequest = async (req: DoctorRequest) => {
     const serviceType = req.serviceType || 'doctor';
     const typeLabels: Record<string, string> = {
       doctor: 'طبيب',
@@ -95,105 +97,147 @@ export default function AdminPanel({
     };
     const currentTypeLabel = typeLabels[serviceType] || 'خدمة طبية';
 
-    if (serviceType === 'doctor') {
-      const newDoc: Doctor = {
-        id: `doc-${Date.now()}`,
-        name: req.name,
-        specialty: req.specialty || 'تخصص عام',
-        clinicName: req.clinicName || 'عيادة خاصة',
-        address: req.address,
-        phone: req.phone,
-        whatsapp: req.phone,
-        createdAt: new Date().toISOString()
-      };
-      onUpdateDoctors([newDoc, ...doctors]);
-      onAddLog('إضافة', 'doctor', `تم قبول ونشر بيانات الطبيب الجديد: ${req.name} من طلب الرقم: ${req.id}`);
-      onShowToast(`🎉 تم قبول ونشر الطبيب "${req.name}" في الدليل بنجاح!`);
-    } else if (serviceType === 'pharmacy') {
-      const displayName = req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : '');
-      const newPharm: Pharmacy = {
-        id: `pharm-${Date.now()}`,
-        name: displayName,
-        address: req.address,
-        phone: req.phone,
-        whatsapp: req.phone,
-        createdAt: new Date().toISOString()
-      };
-      onUpdatePharmacies([newPharm, ...pharmacies]);
-      onAddLog('إضافة', 'pharmacy', `تم قبول ونشر الصيدلية الجديدة: ${req.name} من طلب الرقم: ${req.id}`);
-      onShowToast(`🎉 تم قبول ونشر صيدلية "${req.name}" في الدليل بنجاح!`);
-    } else if (serviceType === 'lab' || serviceType === 'scan_center') {
-      const suffix = serviceType === 'scan_center' ? ' (مركز أشعة)' : '';
-      const newLab: Lab = {
-        id: `lab-${Date.now()}`,
-        name: req.name + suffix,
-        address: req.address,
-        phone: req.phone,
-        whatsapp: req.phone,
-        createdAt: new Date().toISOString()
-      };
-      onUpdateLabs([newLab, ...labs]);
-      onAddLog('إضافة', 'lab', `تم قبول ونشر ${currentTypeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
-      onShowToast(`🎉 تم قبول ونشر ${currentTypeLabel} "${req.name}" في الدليل بنجاح!`);
-    } else if (serviceType === 'hospital') {
-      const newDoc: Doctor = {
-        id: `doc-${Date.now()}`,
-        name: req.name,
-        specialty: 'مستشفى / مركز طبي',
-        clinicName: 'قسم الاستقبال والطوارئ',
-        address: req.address,
-        phone: req.phone,
-        whatsapp: req.phone,
-        createdAt: new Date().toISOString()
-      };
-      onUpdateDoctors([newDoc, ...doctors]);
-      onAddLog('إضافة', 'doctor', `تم قبول ونشر مستشفى جديد: ${req.name} من طلب الرقم: ${req.id}`);
-      onShowToast(`🎉 تم قبول ونشر مستشفى "${req.name}" في الدليل بنجاح!`);
-    } else if (serviceType === 'physiotherapy') {
-      const newDoc: Doctor = {
-        id: `doc-${Date.now()}`,
-        name: req.name,
-        specialty: 'علاج طبيعي وتأهيل',
-        clinicName: 'مركز علاج طبيعي',
-        address: req.address,
-        phone: req.phone,
-        whatsapp: req.phone,
-        createdAt: new Date().toISOString()
-      };
-      onUpdateDoctors([newDoc, ...doctors]);
-      onAddLog('إضافة', 'doctor', `تم قبول ونشر مركز علاج طبيعي: ${req.name} من طلب الرقم: ${req.id}`);
-      onShowToast(`🎉 تم قبول ونشر مركز العلاج الطبيعي "${req.name}" في الدليل بنجاح!`);
-    } else {
-      // other
-      const newDoc: Doctor = {
-        id: `doc-${Date.now()}`,
-        name: req.name,
-        specialty: req.shortDescription || 'خدمة طبية أخرى',
-        clinicName: 'خدمات طبية عامة',
-        address: req.address,
-        phone: req.phone,
-        whatsapp: req.phone,
-        createdAt: new Date().toISOString()
-      };
-      onUpdateDoctors([newDoc, ...doctors]);
-      onAddLog('إضافة', 'doctor', `تم قبول ونشر خدمة طبية أخرى: ${req.name} من طلب الرقم: ${req.id}`);
-      onShowToast(`🎉 تم قبول ونشر الخدمة "${req.name}" في الدليل بنجاح!`);
+    try {
+      console.log(`Firebase: Accepting and publishing request ${req.id} of type ${serviceType}...`);
+      let newId = '';
+
+      if (serviceType === 'doctor') {
+        newId = `doc-${Date.now()}`;
+        const newDoc: Doctor = {
+          id: newId,
+          name: req.name,
+          specialty: req.specialty || 'تخصص عام',
+          clinicName: req.clinicName || 'عيادة خاصة',
+          address: req.address,
+          phone: req.phone,
+          whatsapp: req.phone,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'doctors', newId), newDoc);
+        console.log(`Firebase: Saved doctor document ${newId}`);
+        onUpdateDoctors([newDoc, ...doctors]);
+        onAddLog('إضافة', 'doctor', `تم قبول ونشر بيانات الطبيب الجديد: ${req.name} من طلب الرقم: ${req.id}`);
+        onShowToast(`🎉 تم قبول ونشر الطبيب "${req.name}" في الدليل بنجاح!`);
+      } else if (serviceType === 'pharmacy') {
+        newId = `pharm-${Date.now()}`;
+        const displayName = req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : '');
+        const newPharm: Pharmacy = {
+          id: newId,
+          name: displayName,
+          address: req.address,
+          phone: req.phone,
+          whatsapp: req.phone,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'pharmacies', newId), newPharm);
+        console.log(`Firebase: Saved pharmacy document ${newId}`);
+        onUpdatePharmacies([newPharm, ...pharmacies]);
+        onAddLog('إضافة', 'pharmacy', `تم قبول ونشر الصيدلية الجديدة: ${req.name} من طلب الرقم: ${req.id}`);
+        onShowToast(`🎉 تم قبول ونشر صيدلية "${req.name}" في الدليل بنجاح!`);
+      } else if (serviceType === 'lab' || serviceType === 'scan_center') {
+        newId = `lab-${Date.now()}`;
+        const suffix = serviceType === 'scan_center' ? ' (مركز أشعة)' : '';
+        const newLab: Lab = {
+          id: newId,
+          name: req.name + suffix,
+          address: req.address,
+          phone: req.phone,
+          whatsapp: req.phone,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'labs', newId), newLab);
+        console.log(`Firebase: Saved lab document ${newId}`);
+        onUpdateLabs([newLab, ...labs]);
+        onAddLog('إضافة', 'lab', `تم قبول ونشر ${currentTypeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
+        onShowToast(`🎉 تم قبول ونشر ${currentTypeLabel} "${req.name}" في الدليل بنجاح!`);
+      } else if (serviceType === 'hospital') {
+        newId = `doc-${Date.now()}`;
+        const newDoc: Doctor = {
+          id: newId,
+          name: req.name,
+          specialty: 'مستشفى / مركز طبي',
+          clinicName: 'قسم الاستقبال والطوارئ',
+          address: req.address,
+          phone: req.phone,
+          whatsapp: req.phone,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'doctors', newId), newDoc);
+        console.log(`Firebase: Saved hospital doctor document ${newId}`);
+        onUpdateDoctors([newDoc, ...doctors]);
+        onAddLog('إضافة', 'doctor', `تم قبول ونشر مستشفى جديد: ${req.name} من طلب الرقم: ${req.id}`);
+        onShowToast(`🎉 تم قبول ونشر مستشفى "${req.name}" في الدليل بنجاح!`);
+      } else if (serviceType === 'physiotherapy') {
+        newId = `doc-${Date.now()}`;
+        const newDoc: Doctor = {
+          id: newId,
+          name: req.name,
+          specialty: 'علاج طبيعي وتأهيل',
+          clinicName: 'مركز علاج طبيعي',
+          address: req.address,
+          phone: req.phone,
+          whatsapp: req.phone,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'doctors', newId), newDoc);
+        console.log(`Firebase: Saved physiotherapy doctor document ${newId}`);
+        onUpdateDoctors([newDoc, ...doctors]);
+        onAddLog('إضافة', 'doctor', `تم قبول ونشر مركز علاج طبيعي: ${req.name} من طلب الرقم: ${req.id}`);
+        onShowToast(`🎉 تم قبول ونشر مركز العلاج الطبيعي "${req.name}" في الدليل بنجاح!`);
+      } else {
+        newId = `doc-${Date.now()}`;
+        const newDoc: Doctor = {
+          id: newId,
+          name: req.name,
+          specialty: req.shortDescription || 'خدمة طبية أخرى',
+          clinicName: 'خدمات طبية عامة',
+          address: req.address,
+          phone: req.phone,
+          whatsapp: req.phone,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'doctors', newId), newDoc);
+        console.log(`Firebase: Saved other doctor document ${newId}`);
+        onUpdateDoctors([newDoc, ...doctors]);
+        onAddLog('إضافة', 'doctor', `تم قبول ونشر خدمة طبية أخرى: ${req.name} من طلب الرقم: ${req.id}`);
+        onShowToast(`🎉 تم قبول ونشر الخدمة "${req.name}" في الدليل بنجاح!`);
+      }
+
+      // Update the request status to published in requests collection
+      const updatedReq = { ...req, status: 'published' as const };
+      await setDoc(doc(db, 'requests', req.id), updatedReq);
+      console.log(`Firebase: Request ${req.id} status updated to published successfully.`);
+
+      const updatedRequests = doctorRequests.map(r => r.id === req.id ? updatedReq : r);
+      onUpdateDoctorRequests(updatedRequests);
+    } catch (error: any) {
+      console.error(`Firebase Error accepting and publishing request ${req.id}:`, error);
+      alert(`❌ فشل قبول ونشر الخدمة في قاعدة البيانات: ${error.message || error}`);
     }
-
-    // Update the request status to published
-    const updatedRequests = doctorRequests.map(r => r.id === req.id ? { ...r, status: 'published' as const } : r);
-    onUpdateDoctorRequests(updatedRequests);
   };
 
-  const acceptRequestOnly = (id: string, name: string) => {
-    const updatedRequests = doctorRequests.map(r => r.id === id ? { ...r, status: 'accepted' as const } : r);
-    onUpdateDoctorRequests(updatedRequests);
+  const acceptRequestOnly = async (id: string, name: string) => {
+    const req = doctorRequests.find(r => r.id === id);
+    if (!req) return;
 
-    onAddLog('تعديل', 'system', `تم قبول طلب إضافة: ${name} (في انتظار النشر)`);
-    onShowToast(`✅ تم تغيير حالة طلب الإضافة إلى "مقبول".`);
+    try {
+      console.log(`Firebase: Setting request status to accepted for request ${id}...`);
+      const updatedReq = { ...req, status: 'accepted' as const };
+      await setDoc(doc(db, 'requests', id), updatedReq);
+      console.log(`Firebase: Request ${id} status updated to accepted successfully.`);
+
+      const updatedRequests = doctorRequests.map(r => r.id === id ? updatedReq : r);
+      onUpdateDoctorRequests(updatedRequests);
+
+      onAddLog('تعديل', 'system', `تم قبول طلب إضافة: ${name} (في انتظار النشر)`);
+      onShowToast(`✅ تم تغيير حالة طلب الإضافة إلى "مقبول".`);
+    } catch (error: any) {
+      console.error(`Firebase Error accepting request ${id}:`, error);
+      alert(`❌ فشل قبول الطلب في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
-  const submitRejection = (e: React.FormEvent) => {
+  const submitRejection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectionId || !rejectionReasonInput.trim()) {
       onShowToast('⚠️ يرجى كتابة سبب الرفض أولاً.');
@@ -203,13 +247,23 @@ export default function AdminPanel({
     const req = doctorRequests.find(r => r.id === rejectionId);
     if (!req) return;
 
-    const updatedRequests = doctorRequests.map(r => r.id === rejectionId ? { ...r, status: 'rejected' as const, rejectionReason: rejectionReasonInput } : r);
-    onUpdateDoctorRequests(updatedRequests);
+    try {
+      console.log(`Firebase: Setting request status to rejected for request ${rejectionId}...`);
+      const updatedReq = { ...req, status: 'rejected' as const, rejectionReason: rejectionReasonInput };
+      await setDoc(doc(db, 'requests', rejectionId), updatedReq);
+      console.log(`Firebase: Request ${rejectionId} status updated to rejected successfully.`);
 
-    onAddLog('تعديل', 'system', `تم رفض طلب إضافة الخدمة: ${req.name} بسبب: ${rejectionReasonInput}`);
-    onShowToast(`❌ تم رفض طلب الخدمة مع تدوين السبب.`);
-    setRejectionId(null);
-    setRejectionReasonInput('');
+      const updatedRequests = doctorRequests.map(r => r.id === rejectionId ? updatedReq : r);
+      onUpdateDoctorRequests(updatedRequests);
+
+      onAddLog('تعديل', 'system', `تم رفض طلب إضافة الخدمة: ${req.name} بسبب: ${rejectionReasonInput}`);
+      onShowToast(`❌ تم رفض طلب الخدمة مع تدوين السبب.`);
+      setRejectionId(null);
+      setRejectionReasonInput('');
+    } catch (error: any) {
+      console.error(`Firebase Error rejecting request ${rejectionId}:`, error);
+      alert(`❌ فشل رفض الطلب في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
   const startEditingRequest = (req: DoctorRequest) => {
@@ -229,228 +283,441 @@ export default function AdminPanel({
     });
   };
 
-  const saveEditedRequest = (e: React.FormEvent) => {
+  const saveEditedRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRequestId) return;
 
-    const updatedRequests = doctorRequests.map(r => r.id === editingRequestId ? {
-      ...r,
-      serviceType: editingRequestForm.serviceType,
-      name: editingRequestForm.name,
-      specialty: editingRequestForm.specialty,
-      clinicName: editingRequestForm.clinicName,
-      pharmacistName: editingRequestForm.pharmacistName,
-      shortDescription: editingRequestForm.shortDescription,
-      address: editingRequestForm.address,
-      phone: editingRequestForm.phone,
-      notes: editingRequestForm.notes
-    } : r);
+    const req = doctorRequests.find(r => r.id === editingRequestId);
+    if (!req) return;
 
-    onUpdateDoctorRequests(updatedRequests);
-    onAddLog('تعديل', 'system', `تم تعديل بيانات طلب الإضافة: ${editingRequestForm.name}`);
-    onShowToast('✅ تم حفظ التعديلات على بيانات الطلب بنجاح.');
-    setEditingRequestId(null);
+    try {
+      console.log(`Firebase: Saving edited request ${editingRequestId} details...`);
+      const updatedReq = {
+        ...req,
+        serviceType: editingRequestForm.serviceType,
+        name: editingRequestForm.name,
+        specialty: editingRequestForm.specialty,
+        clinicName: editingRequestForm.clinicName,
+        pharmacistName: editingRequestForm.pharmacistName,
+        shortDescription: editingRequestForm.shortDescription,
+        address: editingRequestForm.address,
+        phone: editingRequestForm.phone,
+        notes: editingRequestForm.notes
+      };
+
+      await setDoc(doc(db, 'requests', editingRequestId), updatedReq);
+      console.log(`Firebase: Request ${editingRequestId} details updated successfully.`);
+
+      const updatedRequests = doctorRequests.map(r => r.id === editingRequestId ? updatedReq : r);
+      onUpdateDoctorRequests(updatedRequests);
+
+      onAddLog('تعديل', 'system', `تم تعديل بيانات طلب الإضافة: ${editingRequestForm.name}`);
+      onShowToast('✅ تم حفظ التعديلات على بيانات الطلب بنجاح.');
+      setEditingRequestId(null);
+    } catch (error: any) {
+      console.error(`Firebase Error saving edited request ${editingRequestId}:`, error);
+      alert(`❌ فشل حفظ تعديلات الطلب في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
-  const deleteDoctorRequest = (id: string, name: string) => {
+  const deleteDoctorRequest = async (id: string, name: string) => {
     if (window.confirm(`هل أنت متأكد من حذف طلب إضافة: ${name} نهائياً؟`)) {
-      onUpdateDoctorRequests(doctorRequests.filter(r => r.id !== id));
-      onAddLog('حذف', 'system', `تم حذف طلب إضافة: ${name}`);
-      onShowToast('🗑️ تم حذف طلب الإضافة بنجاح.');
+      try {
+        console.log(`Firebase: Deleting request ${id}...`);
+        await deleteDoc(doc(db, 'requests', id));
+        console.log(`Firebase: Request ${id} deleted successfully.`);
+
+        onUpdateDoctorRequests(doctorRequests.filter(r => r.id !== id));
+        onAddLog('حذف', 'system', `تم حذف طلب إضافة: ${name}`);
+        onShowToast('🗑️ تم حذف طلب الإضافة بنجاح.');
+      } catch (error: any) {
+        console.error(`Firebase Error deleting request ${id}:`, error);
+        alert(`❌ فشل حذف طلب الإضافة من قاعدة البيانات: ${error.message || error}`);
+      }
     }
   };
 
   // --- CRUD ACTIONS FOR DOCTORS ---
-  const saveDoctor = (e: React.FormEvent) => {
+  const saveDoctor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!docForm.name || !docForm.address || !docForm.phone) {
       onShowToast('⚠️ يرجى ملء الحقول الأساسية: الاسم، العنوان، ورقم الهاتف.');
       return;
     }
     
-    if (editingId) {
-      const updated = doctors.map(d => d.id === editingId ? { ...d, ...docForm } : d);
-      onUpdateDoctors(updated);
-      onAddLog('تعديل', 'doctor', `تم تعديل بيانات الطبيب: ${docForm.name}`);
-      onShowToast('✅ تم تعديل بيانات الطبيب بنجاح.');
-      setEditingId(null);
-    } else {
-      const newDoc: Doctor = {
-        id: `doc-${Date.now()}`,
-        ...docForm,
-        createdAt: new Date().toISOString()
-      };
-      onUpdateDoctors([newDoc, ...doctors]);
-      onAddLog('إضافة', 'doctor', `تمت إضافة الطبيب الجديد: ${docForm.name}`);
-      onShowToast('✅ تمت إضافة الطبيب بنجاح.');
+    try {
+      if (editingId && editingId !== 'new') {
+        console.log(`Firebase: Updating doctor ${editingId}...`);
+        const updatedDoc = {
+          ...docForm,
+          id: editingId
+        };
+        await setDoc(doc(db, 'doctors', editingId), updatedDoc);
+        console.log(`Firebase: Doctor ${editingId} updated successfully.`);
+
+        const updated = doctors.map(d => d.id === editingId ? { ...d, ...docForm } : d);
+        onUpdateDoctors(updated);
+        onAddLog('تعديل', 'doctor', `تم تعديل بيانات الطبيب: ${docForm.name}`);
+        onShowToast('✅ تم تعديل بيانات الطبيب بنجاح.');
+        setEditingId(null);
+        setDocForm({ name: '', specialty: specialties[0] || '', clinicName: '', address: '', phone: '', whatsapp: '' });
+      } else {
+        const newId = `doc-${Date.now()}`;
+        console.log(`Firebase: Creating new doctor with ID ${newId}...`);
+        const newDoc: Doctor = {
+          id: newId,
+          ...docForm,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'doctors', newId), newDoc);
+        console.log(`Firebase: Doctor ${newId} saved successfully.`);
+
+        onUpdateDoctors([newDoc, ...doctors]);
+        onAddLog('إضافة', 'doctor', `تمت إضافة الطبيب الجديد: ${docForm.name}`);
+        onShowToast('✅ تمت إضافة الطبيب بنجاح.');
+        setEditingId(null);
+        setDocForm({ name: '', specialty: specialties[0] || '', clinicName: '', address: '', phone: '', whatsapp: '' });
+      }
+    } catch (error: any) {
+      console.error("Firebase Error saving doctor:", error);
+      alert(`❌ فشل حفظ بيانات الطبيب في قاعدة البيانات: ${error.message || error}`);
     }
-    setDocForm({ name: '', specialty: specialties[0] || '', clinicName: '', address: '', phone: '', whatsapp: '' });
   };
 
-  const deleteDoctor = (id: string, name: string) => {
+  const deleteDoctor = async (id: string, name: string) => {
     if (window.confirm(`هل أنت متأكد من حذف الطبيب: ${name}؟`)) {
-      onUpdateDoctors(doctors.filter(d => d.id !== id));
-      onAddLog('حذف', 'doctor', `تم حذف الطبيب: ${name}`);
-      onShowToast('🗑️ تم حذف الطبيب بنجاح.');
+      try {
+        console.log(`Firebase: Deleting doctor ${id}...`);
+        await deleteDoc(doc(db, 'doctors', id));
+        console.log(`Firebase: Doctor ${id} deleted successfully.`);
+
+        onUpdateDoctors(doctors.filter(d => d.id !== id));
+        onAddLog('حذف', 'doctor', `تم حذف الطبيب: ${name}`);
+        onShowToast('🗑️ تم حذف الطبيب بنجاح.');
+      } catch (error: any) {
+        console.error("Firebase Error deleting doctor:", error);
+        alert(`❌ فشل حذف الطبيب من قاعدة البيانات: ${error.message || error}`);
+      }
     }
   };
 
   // --- CRUD ACTIONS FOR PHARMACIES ---
-  const savePharmacy = (e: React.FormEvent) => {
+  const savePharmacy = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pharmForm.name || !pharmForm.address || !pharmForm.phone) {
       onShowToast('⚠️ يرجى ملء الحقول الأساسية: الاسم، العنوان، ورقم الهاتف.');
       return;
     }
 
-    if (editingId) {
-      const updated = pharmacies.map(p => p.id === editingId ? { ...p, ...pharmForm } : p);
-      onUpdatePharmacies(updated);
-      onAddLog('تعديل', 'pharmacy', `تم تعديل صيدلية: ${pharmForm.name}`);
-      onShowToast('✅ تم تعديل الصيدلية بنجاح.');
-      setEditingId(null);
-    } else {
-      const newPharm: Pharmacy = {
-        id: `pharm-${Date.now()}`,
-        ...pharmForm,
-        createdAt: new Date().toISOString()
-      };
-      onUpdatePharmacies([newPharm, ...pharmacies]);
-      onAddLog('إضافة', 'pharmacy', `تمت إضافة صيدلية جديدة: ${pharmForm.name}`);
-      onShowToast('✅ تمت إضافة الصيدلية بنجاح.');
+    try {
+      if (editingId && editingId !== 'new') {
+        console.log(`Firebase: Updating pharmacy ${editingId}...`);
+        const updatedPharm = {
+          ...pharmForm,
+          id: editingId
+        };
+        await setDoc(doc(db, 'pharmacies', editingId), updatedPharm);
+        console.log(`Firebase: Pharmacy ${editingId} updated successfully.`);
+
+        const updated = pharmacies.map(p => p.id === editingId ? { ...p, ...pharmForm } : p);
+        onUpdatePharmacies(updated);
+        onAddLog('تعديل', 'pharmacy', `تم تعديل صيدلية: ${pharmForm.name}`);
+        onShowToast('✅ تم تعديل الصيدلية بنجاح.');
+        setEditingId(null);
+        setPharmForm({ name: '', address: '', phone: '', whatsapp: '' });
+      } else {
+        const newId = `pharm-${Date.now()}`;
+        console.log(`Firebase: Creating new pharmacy with ID ${newId}...`);
+        const newPharm: Pharmacy = {
+          id: newId,
+          ...pharmForm,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'pharmacies', newId), newPharm);
+        console.log(`Firebase: Pharmacy ${newId} saved successfully.`);
+
+        onUpdatePharmacies([newPharm, ...pharmacies]);
+        onAddLog('إضافة', 'pharmacy', `تمت إضافة صيدلية جديدة: ${pharmForm.name}`);
+        onShowToast('✅ تمت إضافة الصيدلية بنجاح.');
+        setEditingId(null);
+        setPharmForm({ name: '', address: '', phone: '', whatsapp: '' });
+      }
+    } catch (error: any) {
+      console.error("Firebase Error saving pharmacy:", error);
+      alert(`❌ فشل حفظ بيانات الصيدلية في قاعدة البيانات: ${error.message || error}`);
     }
-    setPharmForm({ name: '', address: '', phone: '', whatsapp: '' });
   };
 
-  const deletePharmacy = (id: string, name: string) => {
+  const deletePharmacy = async (id: string, name: string) => {
     if (window.confirm(`هل أنت متأكد من حذف الصيدلية: ${name}؟`)) {
-      onUpdatePharmacies(pharmacies.filter(p => p.id !== id));
-      onAddLog('حذف', 'pharmacy', `تم حذف الصيدلية: ${name}`);
-      onShowToast('🗑️ تم حذف الصيدلية بنجاح.');
+      try {
+        console.log(`Firebase: Deleting pharmacy ${id}...`);
+        await deleteDoc(doc(db, 'pharmacies', id));
+        console.log(`Firebase: Pharmacy ${id} deleted successfully.`);
+
+        onUpdatePharmacies(pharmacies.filter(p => p.id !== id));
+        onAddLog('حذف', 'pharmacy', `تم حذف الصيدلية: ${name}`);
+        onShowToast('🗑️ تم حذف الصيدلية بنجاح.');
+      } catch (error: any) {
+        console.error("Firebase Error deleting pharmacy:", error);
+        alert(`❌ فشل حذف الصيدلية من قاعدة البيانات: ${error.message || error}`);
+      }
     }
   };
 
   // --- CRUD ACTIONS FOR LABS ---
-  const saveLab = (e: React.FormEvent) => {
+  const saveLab = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!labForm.name || !labForm.address || !labForm.phone) {
       onShowToast('⚠️ يرجى ملء الحقول الأساسية: الاسم، العنوان، ورقم الهاتف.');
       return;
     }
 
-    if (editingId) {
-      const updated = labs.map(l => l.id === editingId ? { ...l, ...labForm } : l);
-      onUpdateLabs(updated);
-      onAddLog('تعديل', 'lab', `تم تعديل معمل التحاليل: ${labForm.name}`);
-      onShowToast('✅ تم تعديل بيانات المعمل بنجاح.');
-      setEditingId(null);
-    } else {
-      const newLab: Lab = {
-        id: `lab-${Date.now()}`,
-        ...labForm,
-        createdAt: new Date().toISOString()
-      };
-      onUpdateLabs([newLab, ...labs]);
-      onAddLog('إضافة', 'lab', `تمت إضافة معمل تحاليل جديد: ${labForm.name}`);
-      onShowToast('✅ تمت إضافة المعمل بنجاح.');
+    try {
+      if (editingId && editingId !== 'new') {
+        console.log(`Firebase: Updating lab ${editingId}...`);
+        const updatedLab = {
+          ...labForm,
+          id: editingId
+        };
+        await setDoc(doc(db, 'labs', editingId), updatedLab);
+        console.log(`Firebase: Lab ${editingId} updated successfully.`);
+
+        const updated = labs.map(l => l.id === editingId ? { ...l, ...labForm } : l);
+        onUpdateLabs(updated);
+        onAddLog('تعديل', 'lab', `تم تعديل معمل التحاليل: ${labForm.name}`);
+        onShowToast('✅ تم تعديل بيانات المعمل بنجاح.');
+        setEditingId(null);
+        setLabForm({ name: '', address: '', phone: '', whatsapp: '' });
+      } else {
+        const newId = `lab-${Date.now()}`;
+        console.log(`Firebase: Creating new lab with ID ${newId}...`);
+        const newLab: Lab = {
+          id: newId,
+          ...labForm,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'labs', newId), newLab);
+        console.log(`Firebase: Lab ${newId} saved successfully.`);
+
+        onUpdateLabs([newLab, ...labs]);
+        onAddLog('إضافة', 'lab', `تمت إضافة معمل تحاليل جديد: ${labForm.name}`);
+        onShowToast('✅ تمت إضافة المعمل بنجاح.');
+        setEditingId(null);
+        setLabForm({ name: '', address: '', phone: '', whatsapp: '' });
+      }
+    } catch (error: any) {
+      console.error("Firebase Error saving lab:", error);
+      alert(`❌ فشل حفظ بيانات المعمل في قاعدة البيانات: ${error.message || error}`);
     }
-    setLabForm({ name: '', address: '', phone: '', whatsapp: '' });
   };
 
-  const deleteLab = (id: string, name: string) => {
+  const deleteLab = async (id: string, name: string) => {
     if (window.confirm(`هل أنت متأكد من حذف المعمل: ${name}؟`)) {
-      onUpdateLabs(labs.filter(l => l.id !== id));
-      onAddLog('حذف', 'lab', `تم حذف المعمل: ${name}`);
-      onShowToast('🗑️ تم حذف معمل التحاليل بنجاح.');
+      try {
+        console.log(`Firebase: Deleting lab ${id}...`);
+        await deleteDoc(doc(db, 'labs', id));
+        console.log(`Firebase: Lab ${id} deleted successfully.`);
+
+        onUpdateLabs(labs.filter(l => l.id !== id));
+        onAddLog('حذف', 'lab', `تم حذف المعمل: ${name}`);
+        onShowToast('🗑️ تم حذف معمل التحاليل بنجاح.');
+      } catch (error: any) {
+        console.error("Firebase Error deleting lab:", error);
+        alert(`❌ فشل حذف المعمل من قاعدة البيانات: ${error.message || error}`);
+      }
     }
   };
 
-  const toggleDoctorVisibility = (id: string, name: string, hidden?: boolean) => {
-    const updated = doctors.map(d => d.id === id ? { ...d, hidden: !hidden } : d);
-    onUpdateDoctors(updated);
-    onAddLog('تعديل', 'doctor', `تم ${hidden ? 'إظهار' : 'إخفاء'} الطبيب: ${name}`);
-    onShowToast(`✔️ تم ${hidden ? 'إظهار' : 'إخفاء'} الطبيب بنجاح`);
+  const toggleDoctorVisibility = async (id: string, name: string, hidden?: boolean) => {
+    const docToUpdate = doctors.find(d => d.id === id);
+    if (!docToUpdate) return;
+
+    try {
+      console.log(`Firebase: Toggling visibility of doctor ${id} to ${!hidden}...`);
+      const updatedDoc = { ...docToUpdate, hidden: !hidden };
+      await setDoc(doc(db, 'doctors', id), updatedDoc);
+      console.log(`Firebase: Doctor ${id} visibility updated successfully.`);
+
+      const updated = doctors.map(d => d.id === id ? updatedDoc : d);
+      onUpdateDoctors(updated);
+      onAddLog('تعديل', 'doctor', `تم ${hidden ? 'إظهار' : 'إخفاء'} الطبيب: ${name}`);
+      onShowToast(`✔️ تم ${hidden ? 'إظهار' : 'إخفاء'} الطبيب بنجاح`);
+    } catch (error: any) {
+      console.error("Firebase Error toggling doctor visibility:", error);
+      alert(`❌ فشل تعديل حالة إظهار الطبيب في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
-  const togglePharmacyVisibility = (id: string, name: string, hidden?: boolean) => {
-    const updated = pharmacies.map(p => p.id === id ? { ...p, hidden: !hidden } : p);
-    onUpdatePharmacies(updated);
-    onAddLog('تعديل', 'pharmacy', `تم ${hidden ? 'إظهار' : 'إخفاء'} الصيدلية: ${name}`);
-    onShowToast(`✔️ تم ${hidden ? 'إظهار' : 'إخفاء'} الصيدلية بنجاح`);
+  const togglePharmacyVisibility = async (id: string, name: string, hidden?: boolean) => {
+    const pharmToUpdate = pharmacies.find(p => p.id === id);
+    if (!pharmToUpdate) return;
+
+    try {
+      console.log(`Firebase: Toggling visibility of pharmacy ${id} to ${!hidden}...`);
+      const updatedPharm = { ...pharmToUpdate, hidden: !hidden };
+      await setDoc(doc(db, 'pharmacies', id), updatedPharm);
+      console.log(`Firebase: Pharmacy ${id} visibility updated successfully.`);
+
+      const updated = pharmacies.map(p => p.id === id ? updatedPharm : p);
+      onUpdatePharmacies(updated);
+      onAddLog('تعديل', 'pharmacy', `تم ${hidden ? 'إظهار' : 'إخفاء'} الصيدلية: ${name}`);
+      onShowToast(`✔️ تم ${hidden ? 'إظهار' : 'إخفاء'} الصيدلية بنجاح`);
+    } catch (error: any) {
+      console.error("Firebase Error toggling pharmacy visibility:", error);
+      alert(`❌ فشل تعديل حالة إظهار الصيدلية في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
-  const toggleLabVisibility = (id: string, name: string, hidden?: boolean) => {
-    const updated = labs.map(l => l.id === id ? { ...l, hidden: !hidden } : l);
-    onUpdateLabs(updated);
-    onAddLog('تعديل', 'lab', `تم ${hidden ? 'إظهار' : 'إخفاء'} المعمل: ${name}`);
-    onShowToast(`✔️ تم ${hidden ? 'إظهار' : 'إخفاء'} المعمل بنجاح`);
+  const toggleLabVisibility = async (id: string, name: string, hidden?: boolean) => {
+    const labToUpdate = labs.find(l => l.id === id);
+    if (!labToUpdate) return;
+
+    try {
+      console.log(`Firebase: Toggling visibility of lab ${id} to ${!hidden}...`);
+      const updatedLab = { ...labToUpdate, hidden: !hidden };
+      await setDoc(doc(db, 'labs', id), updatedLab);
+      console.log(`Firebase: Lab ${id} visibility updated successfully.`);
+
+      const updated = labs.map(l => l.id === id ? updatedLab : l);
+      onUpdateLabs(updated);
+      onAddLog('تعديل', 'lab', `تم ${hidden ? 'إظهار' : 'إخفاء'} المعمل: ${name}`);
+      onShowToast(`✔️ تم ${hidden ? 'إظهار' : 'إخفاء'} المعمل بنجاح`);
+    } catch (error: any) {
+      console.error("Firebase Error toggling lab visibility:", error);
+      alert(`❌ فشل تعديل حالة إظهار المعمل في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
   // --- SPECIALTIES ACTIONS ---
-  const addSpecialty = () => {
+  const addSpecialty = async () => {
     if (!newSpecialty.trim()) return;
-    if (specialties.includes(newSpecialty.trim())) {
+    const specName = newSpecialty.trim();
+    if (specialties.includes(specName)) {
       onShowToast('⚠️ هذا التخصص موجود بالفعل.');
       return;
     }
-    const updated = [...specialties, newSpecialty.trim()];
-    onUpdateSpecialties(updated);
-    onAddLog('إضافة', 'specialty', `تمت إضافة تخصص طبي جديد: ${newSpecialty}`);
-    onShowToast('✅ تم إدراج التخصص الطبي الجديد بنجاح.');
-    setNewSpecialty('');
+
+    try {
+      console.log(`Firebase: Adding specialty "${specName}" to settings/specialties...`);
+      const updated = [...specialties, specName];
+      await setDoc(doc(db, 'settings', 'specialties'), { list: updated });
+      console.log(`Firebase: Specialty saved successfully.`);
+
+      onUpdateSpecialties(updated);
+      onAddLog('إضافة', 'specialty', `تمت إضافة تخصص طبي جديد: ${newSpecialty}`);
+      onShowToast('✅ تم إدراج التخصص الطبي الجديد بنجاح.');
+      setNewSpecialty('');
+    } catch (error: any) {
+      console.error("Firebase Error saving specialty:", error);
+      alert(`❌ فشل إضافة التخصص في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
-  const deleteSpecialty = (specName: string) => {
+  const deleteSpecialty = async (specName: string) => {
     const isUsed = doctors.some(d => d.specialty === specName);
     if (isUsed) {
       onShowToast('❌ لا يمكن حذف تخصص مرتبط بأطباء مسجلين حالياً!');
       return;
     }
+
     if (window.confirm(`هل ترغب في حذف التخصص الطبي: "${specName}"؟`)) {
-      onUpdateSpecialties(specialties.filter(s => s !== specName));
-      onAddLog('حذف', 'specialty', `تم حذف التخصص الطبي: ${specName}`);
-      onShowToast('🗑️ تم حذف التخصص بنجاح.');
+      try {
+        console.log(`Firebase: Removing specialty "${specName}" from settings/specialties...`);
+        const updated = specialties.filter(s => s !== specName);
+        await setDoc(doc(db, 'settings', 'specialties'), { list: updated });
+        console.log(`Firebase: Specialty deleted successfully.`);
+
+        onUpdateSpecialties(updated);
+        onAddLog('حذف', 'specialty', `تم حذف التخصص الطبي: ${specName}`);
+        onShowToast('🗑️ تم حذف التخصص بنجاح.');
+      } catch (error: any) {
+        console.error("Firebase Error deleting specialty:", error);
+        alert(`❌ فشل حذف التخصص من قاعدة البيانات: ${error.message || error}`);
+      }
     }
   };
 
   // --- ADS ACTIONS ---
-  const saveAd = (e: React.FormEvent) => {
+  const saveAd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adForm.title || !adForm.content) {
       onShowToast('⚠️ يرجى تعبئة عنوان ومحتوى الإعلان.');
       return;
     }
 
-    if (editingId) {
-      const updated = ads.map(a => a.id === editingId ? { ...a, ...adForm } : a);
-      onUpdateAds(updated);
-      onAddLog('تعديل', 'ad', `تم تعديل الإعلان: ${adForm.title}`);
-      onShowToast('✅ تم تحديث بيانات الإعلان بنجاح.');
-      setEditingId(null);
-    } else {
-      const newAd: Ad = {
-        id: `ad-${Date.now()}`,
-        ...adForm
-      };
-      onUpdateAds([newAd, ...ads]);
-      onAddLog('إضافة', 'ad', `تم إدراج إعلان ترويجي جديد: ${adForm.title}`);
-      onShowToast('✅ تمت إضافة الإعلان بنجاح.');
+    try {
+      if (editingId && editingId !== 'new') {
+        console.log(`Firebase: Updating ad ${editingId}...`);
+        const updatedAd = {
+          ...adForm,
+          id: editingId
+        };
+        await setDoc(doc(db, 'ads', editingId), updatedAd);
+        console.log(`Firebase: Ad ${editingId} updated successfully.`);
+
+        const updated = ads.map(a => a.id === editingId ? { ...a, ...adForm } : a);
+        onUpdateAds(updated);
+        onAddLog('تعديل', 'ad', `تم تعديل الإعلان: ${adForm.title}`);
+        onShowToast('✅ تم تحديث بيانات الإعلان بنجاح.');
+        setEditingId(null);
+        setAdForm({ title: '', content: '', link: '', position: 'ticker', isActive: true });
+      } else {
+        const newId = `ad-${Date.now()}`;
+        console.log(`Firebase: Creating new ad ${newId}...`);
+        const newAd: Ad = {
+          id: newId,
+          ...adForm
+        };
+        await setDoc(doc(db, 'ads', newId), newAd);
+        console.log(`Firebase: Ad ${newId} saved successfully.`);
+
+        onUpdateAds([newAd, ...ads]);
+        onAddLog('إضافة', 'ad', `تم إدراج إعلان ترويجي جديد: ${adForm.title}`);
+        onShowToast('✅ تمت إضافة الإعلان بنجاح.');
+        setEditingId(null);
+        setAdForm({ title: '', content: '', link: '', position: 'ticker', isActive: true });
+      }
+    } catch (error: any) {
+      console.error("Firebase Error saving ad:", error);
+      alert(`❌ فشل حفظ الإعلان في قاعدة البيانات: ${error.message || error}`);
     }
-    setAdForm({ title: '', content: '', link: '', position: 'ticker', isActive: true });
   };
 
-  const toggleAdStatus = (id: string, currentStatus: boolean, title: string) => {
-    const updated = ads.map(a => a.id === id ? { ...a, isActive: !currentStatus } : a);
-    onUpdateAds(updated);
-    onAddLog('تعديل', 'ad', `تم ${!currentStatus ? 'تفعيل' : 'تعطيل'} الإعلان: ${title}`);
-    onShowToast(`📢 تم ${!currentStatus ? 'تفعيل' : 'تعطيل'} الإعلان بنجاح.`);
+  const toggleAdStatus = async (id: string, currentStatus: boolean, title: string) => {
+    const adToUpdate = ads.find(a => a.id === id);
+    if (!adToUpdate) return;
+
+    try {
+      console.log(`Firebase: Toggling status of ad ${id} to ${!currentStatus}...`);
+      const updatedAd = { ...adToUpdate, isActive: !currentStatus };
+      await setDoc(doc(db, 'ads', id), updatedAd);
+      console.log(`Firebase: Ad ${id} status updated successfully.`);
+
+      const updated = ads.map(a => a.id === id ? updatedAd : a);
+      onUpdateAds(updated);
+      onAddLog('تعديل', 'ad', `تم ${!currentStatus ? 'تفعيل' : 'تعطيل'} الإعلان: ${title}`);
+      onShowToast(`📢 تم ${!currentStatus ? 'تفعيل' : 'تعطيل'} الإعلان بنجاح.`);
+    } catch (error: any) {
+      console.error("Firebase Error toggling ad status:", error);
+      alert(`❌ فشل تعديل حالة الإعلان في قاعدة البيانات: ${error.message || error}`);
+    }
   };
 
-  const deleteAd = (id: string, title: string) => {
+  const deleteAd = async (id: string, title: string) => {
     if (window.confirm(`هل أنت متأكد من إزالة هذا الإعلان: ${title}؟`)) {
-      onUpdateAds(ads.filter(a => a.id !== id));
-      onAddLog('حذف', 'ad', `تم حذف الإعلان: ${title}`);
-      onShowToast('🗑️ تم حذف الإعلان بنجاح.');
+      try {
+        console.log(`Firebase: Deleting ad ${id}...`);
+        await deleteDoc(doc(db, 'ads', id));
+        console.log(`Firebase: Ad ${id} deleted successfully.`);
+
+        onUpdateAds(ads.filter(a => a.id !== id));
+        onAddLog('حذف', 'ad', `تم حذف الإعلان: ${title}`);
+        onShowToast('🗑️ تم حذف الإعلان بنجاح.');
+      } catch (error: any) {
+        console.error("Firebase Error deleting ad:", error);
+        alert(`❌ فشل حذف الإعلان من قاعدة البيانات: ${error.message || error}`);
+      }
     }
   };
 
@@ -483,7 +750,7 @@ export default function AdminPanel({
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const importedData = JSON.parse(event.target?.result as string);
         
@@ -498,6 +765,32 @@ export default function AdminPanel({
           throw new Error("تنسيق الملف غير متوافق مع نظام دليل الوقف الطبي.");
         }
 
+        onShowToast('⏳ جاري استعادة البيانات في قاعدة بيانات Firebase...');
+
+        // 1. Save doctors
+        for (const item of importedData.doctors) {
+          await setDoc(doc(db, 'doctors', item.id), item);
+        }
+        // 2. Save pharmacies
+        for (const item of importedData.pharmacies) {
+          await setDoc(doc(db, 'pharmacies', item.id), item);
+        }
+        // 3. Save labs
+        for (const item of importedData.labs) {
+          await setDoc(doc(db, 'labs', item.id), item);
+        }
+        // 4. Save specialties
+        await setDoc(doc(db, 'settings', 'specialties'), { list: importedData.specialties });
+        // 5. Save ads
+        for (const item of importedData.ads) {
+          await setDoc(doc(db, 'ads', item.id), item);
+        }
+        // 6. Save config
+        if (importedData.config) {
+          await setDoc(doc(db, 'settings', 'main'), importedData.config);
+        }
+
+        // Now update local React state
         onUpdateDoctors(importedData.doctors);
         onUpdatePharmacies(importedData.pharmacies);
         onUpdateLabs(importedData.labs);
@@ -511,7 +804,8 @@ export default function AdminPanel({
         onShowToast('♻️ تم استيراد البيانات واستعادتها بنجاح تام!');
         if (fileInputRef.current) fileInputRef.current.value = '';
       } catch (err: any) {
-        onShowToast(`❌ فشل استعادة البيانات: ${err.message || 'الملف تالف أو غير متوافق.'}`);
+        console.error("Firebase Error importing backup:", err);
+        alert(`❌ فشل استعادة البيانات: ${err.message || 'الملف تالف أو غير متوافق.'}`);
       }
     };
     reader.readAsText(file);
