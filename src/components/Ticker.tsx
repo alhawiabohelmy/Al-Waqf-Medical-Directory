@@ -5,6 +5,7 @@ import { Ad } from '../data/initialData';
 interface TickerProps {
   ads: Ad[];
   speed?: number; // interval speed in seconds
+  key?: any;
 }
 
 export default function Ticker({ ads, speed = 4 }: TickerProps) {

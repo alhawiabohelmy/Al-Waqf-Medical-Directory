@@ -94,6 +94,13 @@ export interface HomePageConfig {
   adminPassword?: string;
 }
 
+export interface RequestHistory {
+  timestamp: string;
+  status: string;
+  updatedBy: string;
+  notes?: string;
+}
+
 export interface DoctorRequest {
   id: string;
   serviceType: 'doctor' | 'pharmacy' | 'lab' | 'scan_center' | 'hospital' | 'physiotherapy' | 'other';
@@ -119,8 +126,11 @@ export interface DoctorRequest {
   center: string; // default "الوقف"
   notes?: string;
   createdAt: string;
-  status: 'pending' | 'accepted' | 'published' | 'rejected';
+  updatedAt?: string;
+  status: 'pending' | 'contacting' | 'reviewing_data' | 'incomplete_data' | 'awaiting_completion' | 'accepted' | 'published' | 'rejected' | 'cancelled' | 'archived';
   rejectionReason?: string;
+  adminNotes?: string;
+  history?: RequestHistory[];
 }
 
 export const INITIAL_SPECIALTIES: string[] = [

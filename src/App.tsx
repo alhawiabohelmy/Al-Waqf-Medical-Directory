@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import * as LucideIcons from 'lucide-react';
 import { 
   Search, Stethoscope, Pill, FlaskConical, ArrowUpRight, CheckCircle2, 
   HelpCircle, Send, HeartPulse, ShieldAlert, ChevronLeft, Volume2, Info, MessageSquare,
   ClipboardList, UserPlus, PlusCircle, Check, Clock, AlertCircle, XCircle, ArrowLeft, X,
-  ShieldCheck, FileText
+  ShieldCheck, FileText, PhoneCall, FileSearch, AlertTriangle, Archive, Save
 } from 'lucide-react';
 
 // Firebase Firestore
@@ -22,6 +23,93 @@ import {
   INITIAL_DOCTORS, INITIAL_PHARMACIES, INITIAL_LABS, INITIAL_SPECIALTIES, 
   INITIAL_ADS, INITIAL_LOGS, INITIAL_HOME_CONFIG 
 } from './data/initialData';
+
+interface ThemeColorSet {
+  bg: string;
+  bgHover: string;
+  text: string;
+  textHover: string;
+  border: string;
+  bgLight: string;
+  shadow: string;
+  ring: string;
+}
+
+const getThemeColorClasses = (color: HomePageConfig['themeColor'] = 'emerald'): ThemeColorSet => {
+  const mapping: Record<string, ThemeColorSet> = {
+    emerald: {
+      bg: 'bg-emerald-500',
+      bgHover: 'hover:bg-emerald-600',
+      text: 'text-emerald-600',
+      textHover: 'hover:text-emerald-700',
+      border: 'border-emerald-200',
+      bgLight: 'bg-emerald-50',
+      shadow: 'shadow-emerald-200',
+      ring: 'focus:ring-emerald-500',
+    },
+    blue: {
+      bg: 'bg-blue-600',
+      bgHover: 'hover:bg-blue-700',
+      text: 'text-blue-600',
+      textHover: 'hover:text-blue-700',
+      border: 'border-blue-200',
+      bgLight: 'bg-blue-50',
+      shadow: 'shadow-blue-200',
+      ring: 'focus:ring-blue-600',
+    },
+    purple: {
+      bg: 'bg-purple-600',
+      bgHover: 'hover:bg-purple-700',
+      text: 'text-purple-600',
+      textHover: 'hover:text-purple-700',
+      border: 'border-purple-200',
+      bgLight: 'bg-purple-50',
+      shadow: 'shadow-purple-200',
+      ring: 'focus:ring-purple-600',
+    },
+    rose: {
+      bg: 'bg-rose-600',
+      bgHover: 'hover:bg-rose-700',
+      text: 'text-rose-600',
+      textHover: 'hover:text-rose-700',
+      border: 'border-rose-200',
+      bgLight: 'bg-rose-50',
+      shadow: 'shadow-rose-200',
+      ring: 'focus:ring-rose-600',
+    },
+    amber: {
+      bg: 'bg-amber-500',
+      bgHover: 'hover:bg-amber-600',
+      text: 'text-amber-600',
+      textHover: 'hover:text-amber-700',
+      border: 'border-amber-200',
+      bgLight: 'bg-amber-50',
+      shadow: 'shadow-amber-200',
+      ring: 'focus:ring-amber-500',
+    },
+    indigo: {
+      bg: 'bg-indigo-600',
+      bgHover: 'hover:bg-indigo-700',
+      text: 'text-indigo-600',
+      textHover: 'hover:text-indigo-700',
+      border: 'border-indigo-200',
+      bgLight: 'bg-indigo-50',
+      shadow: 'shadow-indigo-200',
+      ring: 'focus:ring-indigo-600',
+    },
+    slate: {
+      bg: 'bg-slate-700',
+      bgHover: 'hover:bg-slate-800',
+      text: 'text-slate-700',
+      textHover: 'hover:text-slate-800',
+      border: 'border-slate-300',
+      bgLight: 'bg-slate-100',
+      shadow: 'shadow-slate-200',
+      ring: 'focus:ring-slate-700',
+    },
+  };
+  return mapping[color || 'emerald'] || mapping.emerald;
+};
 
 export default function App() {
   // --- CORE SYSTEM STATES ---
@@ -135,11 +223,19 @@ export default function App() {
   const handleUpdateConfig = (value: HomePageConfig | ((prev: HomePageConfig) => HomePageConfig)) => {
     setConfig((prev) => {
       const resolved = typeof value === 'function' ? value(prev) : value;
-      setDoc(doc(db, 'settings', 'main'), resolved).catch(err => {
-        console.error("Error saving config to Firestore settings/main:", err);
-      });
       return resolved;
     });
+  };
+
+  const handleSaveConfig = async (updatedConfig: HomePageConfig) => {
+    try {
+      console.log("Saving settings to Firestore settings/main...", updatedConfig);
+      await setDoc(doc(db, 'settings', 'main'), updatedConfig);
+      showToast('🎉 تم حفظ جميع الإعدادات بنجاح في قاعدة البيانات!');
+    } catch (err: any) {
+      console.error("Error saving config to Firestore:", err);
+      alert(`❌ فشل في حفظ الإعدادات: ${err.message || err}`);
+    }
   };
 
   const handleUpdateDoctorRequests = (value: DoctorRequest[] | ((prev: DoctorRequest[]) => DoctorRequest[])) => {
@@ -639,8 +735,21 @@ export default function App() {
     return [...matchedDoctors, ...matchedPharmacies, ...matchedLabs];
   };
 
+  const getBackgroundClass = () => {
+    switch (config.themeBackground) {
+      case 'neutral': return 'bg-slate-100 text-slate-800';
+      case 'warm': return 'bg-[#FAF6F0] text-slate-800';
+      case 'dark': return 'bg-slate-950 text-slate-100';
+      case 'light':
+      default:
+        return 'bg-slate-50 text-slate-800';
+    }
+  };
+
+  const themeClasses = getThemeColorClasses(config.themeColor);
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 selection:bg-emerald-100 selection:text-emerald-900">
+    <div className={`min-h-screen flex flex-col ${getBackgroundClass()} selection:bg-slate-200 selection:text-slate-950`}>
       
       {/* 2. RESPONSIVE SITE NAVIGATION */}
       <Navbar 
@@ -662,7 +771,13 @@ export default function App() {
 
               switch (sectionId) {
                 case 'ticker':
-                  return null;
+                  return (
+                    <Ticker 
+                      key={sectionId} 
+                      ads={ads} 
+                      speed={config.tickerSpeed || 4} 
+                    />
+                  );
                 case 'top-ad':
                   return topBanner ? (
                     <div key={sectionId} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
@@ -1147,21 +1262,30 @@ export default function App() {
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 animate-fadeIn">
             <div className="bg-white rounded-3xl border border-slate-150 p-8 sm:p-12 shadow-sm text-center">
               
-              <div className="mx-auto bg-emerald-50 p-4 rounded-2xl w-16 h-16 flex items-center justify-center text-emerald-500 mb-6">
+              <div className={`mx-auto p-4 rounded-2xl w-16 h-16 flex items-center justify-center mb-6 ${themeClasses.bgLight} ${themeClasses.text}`}>
                 <Info className="h-10 w-10" />
               </div>
 
-              <h1 className="text-3xl font-black text-slate-900 leading-tight">من نحن - دليل الوقف الطبي</h1>
-              <p className="text-slate-400 text-xs sm:text-sm font-semibold mt-1.5">دليلك الصحي المعتمد لمركز الوقف، محافظة قنا</p>
+              <h1 className="text-3xl font-black text-slate-900 leading-tight">
+                {config.aboutTitle || 'من نحن - دليل الوقف الطبي'}
+              </h1>
+              <p className="text-slate-400 text-xs sm:text-sm font-semibold mt-1.5">
+                {config.aboutSubtitle || 'دليلك الصحي المعتمد لمركز الوقف، محافظة قنا'}
+              </p>
               
               <div className="mt-8 border-t border-slate-100 pt-8 text-right space-y-6 text-slate-600 leading-relaxed font-medium">
-                
-                <p>
-                  <strong>دليل الوقف الطبي</strong> هو دليل إلكتروني خدمي مجاني تم إطلاقه خصيصاً لخدمة وتسهيل وصول أهالي 
-                  مركز الوقف بمحافظة قنا والقرى المجاورة إلى الرعاية الصحية المطلوبة في أسرع وقت.
-                </p>
+                <div className="whitespace-pre-line text-sm sm:text-base leading-relaxed">
+                  {config.aboutText || `**دليل الوقف الطبي** هو دليل إلكتروني خدمي مجاني تم إطلاقه خصيصاً لخدمة وتسهيل وصول أهالي مركز الوقف بمحافظة قنا والقرى المجاورة إلى الرعاية الصحية المطلوبة في أسرع وقت.
 
-                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5 text-amber-900">
+نسعى باستمرار لتطوير وتحديث الدليل، وإدراج أحدث عيادات الأطباء في مختلف التخصصات، والصيدليات العاملة طوال الـ 24 ساعة، بجانب أفضل معامل التحاليل الطبية والاشعة، لمساعدة المواطن الوقفي في تلبية احتياجاته الطبية دون عناء التنقل والبحث العشوائي.
+
+**أهدافنا الأساسية:**
+- تجميع وتدقيق بيانات الأطباء والصيدليات والمعامل بمركز الوقف في مكان واحد وسريع.
+- تقديم واجهات تصفح عربية بالكامل وسلسة التصفح من مختلف الأجهزة الذكية والكمبيوتر.
+- تنظيم المساحات الإعلانية لخدمات الرعاية الصحية ودعم استمرارية تطوير وتحديث الدليل مجاناً للمواطنين.`}
+                </div>
+
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5 text-amber-900 text-right">
                   <h4 className="font-bold text-sm mb-1 text-amber-950 flex items-center gap-1.5">
                     <ShieldAlert className="h-4.5 w-4.5 text-amber-600" />
                     <span>ملاحظة أمان وتأكيد دقة البيانات</span>
@@ -1171,23 +1295,6 @@ export default function App() {
                     <strong> إدارة الموقع فقط</strong>. لا يُسمح لأي جهة خارجية أو مستخدم عام بإضافة أو تعديل البيانات مباشرة.
                   </p>
                 </div>
-
-                <p>
-                  نسعى باستمرار لتطوير وتحديث الدليل، وإدراج أحدث عيادات الأطباء في مختلف التخصصات، والصيدليات العاملة طوال الـ 24 ساعة، 
-                  بجانب أفضل معامل التحاليل الطبية والاشعة، لمساعدة المواطن الوقفي في تلبية احتياجاته الطبية دون عناء التنقل والبحث العشوائي.
-                </p>
-
-                <h3 className="text-lg font-bold text-slate-900 pt-4 flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                  <span>أهدافنا الأساسية:</span>
-                </h3>
-
-                <ul className="list-disc list-inside space-y-2.5 text-sm mr-4">
-                  <li>تجميع وتدقيق بيانات الأطباء والصيدليات والمعامل بمركز الوقف في مكان واحد وسريع.</li>
-                  <li>تقديم واجهات تصفح عربية بالكامل وسلسة التصفح من مختلف الأجهزة الذكية والكمبيوتر.</li>
-                  <li>تنظيم المساحات الإعلانية لخدمات الرعاية الصحية ودعم استمرارية تطوير وتحديث الدليل مجاناً للمواطنين.</li>
-                </ul>
-
               </div>
             </div>
           </div>
@@ -1202,37 +1309,81 @@ export default function App() {
               {/* Contact Sidebar */}
               <div className="md:col-span-2 bg-slate-900 text-white p-8 flex flex-col justify-between">
                 <div>
-                  <h2 className="text-2xl font-black">اتصل بنا</h2>
-                  <p className="text-slate-400 text-xs mt-1.5 font-semibold leading-relaxed">يسعدنا تلقي اقتراحاتكم، طلبات إضافة عياداتكم، أو الاستفسار عن المساحات الإعلانية المتاحة.</p>
+                  <h2 className="text-2xl font-black">{config.contactTitle || "اتصل بنا"}</h2>
+                  <p className="text-slate-400 text-xs mt-1.5 font-semibold leading-relaxed">
+                    {config.contactSubtitle || "يسعدنا تلقي اقتراحاتكم، طلبات إضافة عياداتكم، أو الاستفسار عن المساحات الإعلانية المتاحة."}
+                  </p>
                 </div>
 
                 <div className="space-y-6 my-8 text-sm">
-                  <div className="flex items-start gap-3">
-                    <span className="text-emerald-400 mt-0.5">📍</span>
-                    <div>
-                      <strong className="block text-white">الموقع الرئيسي للإدارة</strong>
-                      <span className="text-slate-400 text-xs">مركز الوقف، محافظة قنا، مصر</span>
+                  {config.contactAddress && (
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 ${themeClasses.text}`}>📍</span>
+                      <div>
+                        <strong className="block text-white">الموقع الرئيسي للإدارة</strong>
+                        <span className="text-slate-400 text-xs">{config.contactAddress}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex items-start gap-3">
-                    <span className="text-emerald-400 mt-0.5">📞</span>
-                    <div>
-                      <strong className="block text-white">رقم هاتف الإدارة والواتساب</strong>
-                      <span className="text-slate-400 text-xs font-mono">+20 109 876 5432</span>
+                  {config.contactPhone && (
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 ${themeClasses.text}`}>📞</span>
+                      <div>
+                        <strong className="block text-white">رقم هاتف الإدارة والواتساب</strong>
+                        <span className="text-slate-400 text-xs font-mono" dir="ltr">{config.contactPhone}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex items-start gap-3">
-                    <span className="text-emerald-400 mt-0.5">✉️</span>
-                    <div>
-                      <strong className="block text-white">البريد الإلكتروني للإدارة</strong>
-                      <span className="text-slate-400 text-xs font-mono">support@waqfmedical.com</span>
+                  {config.contactEmail && (
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 ${themeClasses.text}`}>✉️</span>
+                      <div>
+                        <strong className="block text-white">البريد الإلكتروني للإدارة</strong>
+                        <span className="text-slate-400 text-xs font-mono" dir="ltr">{config.contactEmail}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                <p className="text-[10px] text-slate-500">ساعات عمل الدعم: من 9 صباحاً حتى 9 مساءً</p>
+                {config.contactWorkingHours && (
+                  <p className="text-[10px] text-slate-500 mb-4">{config.contactWorkingHours}</p>
+                )}
+
+                {/* Social Media Links */}
+                {(config.socialFacebook || config.socialWhatsapp || config.socialYoutube || config.socialTwitter || config.socialInstagram) && (
+                  <div className="border-t border-slate-800 pt-4 mt-2">
+                    <h4 className="text-slate-400 text-[10px] font-bold mb-2.5">روابط شبكات التواصل الاجتماعي للتواصل</h4>
+                    <div className="flex items-center gap-2.5">
+                      {config.socialFacebook && (
+                        <a href={config.socialFacebook} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors hover:bg-slate-750" title="Facebook">
+                          <LucideIcons.Facebook className="h-4 w-4" />
+                        </a>
+                      )}
+                      {config.socialWhatsapp && (
+                        <a href={config.socialWhatsapp} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors hover:bg-slate-750" title="WhatsApp">
+                          <LucideIcons.MessageSquare className="h-4 w-4" />
+                        </a>
+                      )}
+                      {config.socialYoutube && (
+                        <a href={config.socialYoutube} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors hover:bg-slate-750" title="YouTube">
+                          <LucideIcons.Youtube className="h-4 w-4" />
+                        </a>
+                      )}
+                      {config.socialTwitter && (
+                        <a href={config.socialTwitter} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors hover:bg-slate-750" title="Twitter / X">
+                          <LucideIcons.Twitter className="h-4 w-4" />
+                        </a>
+                      )}
+                      {config.socialInstagram && (
+                        <a href={config.socialInstagram} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors hover:bg-slate-750" title="Instagram">
+                          <LucideIcons.Instagram className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Contact Form */}
@@ -2069,6 +2220,7 @@ export default function App() {
             onUpdateSpecialties={handleUpdateSpecialties}
             onUpdateAds={handleUpdateAds}
             onUpdateConfig={handleUpdateConfig}
+            onSaveConfig={handleSaveConfig}
             onUpdateDoctorRequests={handleUpdateDoctorRequests}
             onAddLog={addLog}
             onShowToast={showToast}
@@ -2085,19 +2237,61 @@ export default function App() {
             {/* Column 1: Info and Slogan */}
             <div className="md:col-span-2 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="bg-emerald-500 text-white p-2 rounded-lg">
-                  <HeartPulse className="h-5 w-5" />
+                <div className={`p-2 rounded-lg text-white ${themeClasses.bg}`}>
+                  {(() => {
+                    const IconComp = (LucideIcons as any)[config.siteLogoIcon || ''] || HeartPulse;
+                    return <IconComp className="h-5 w-5" />;
+                  })()}
                 </div>
-                <span className="text-white text-lg font-bold">دليل الوقف الطبي</span>
+                <span className="text-white text-lg font-bold">{config.siteLogoText || config.siteName || "دليل الوقف الطبي"}</span>
               </div>
               <p className="text-xs text-slate-400 max-w-sm leading-relaxed font-semibold">
-                دليل إلكتروني محلي ومجاني بالكامل يهدف لتسهيل الوصول للأطباء والصيدليات والمعامل بمركز الوقف، محافظة قنا لخدمة أهالينا وتوفير الرعاية الكريمة.
+                {config.heroSubtitle || "دليل إلكتروني محلي ومجاني بالكامل يهدف لتسهيل الوصول للأطباء والصيدليات والمعامل بمركز الوقف، محافظة قنا لخدمة أهالينا وتوفير الرعاية الكريمة."}
               </p>
-              <div className="text-xs text-emerald-400 font-bold">
-                "دليلك للوصول إلى الأطباء والصيدليات والمعامل في مركز الوقف"
+              <div className={`text-xs font-bold ${
+                config.themeColor === 'blue' ? 'text-blue-400' :
+                config.themeColor === 'purple' ? 'text-purple-400' :
+                config.themeColor === 'rose' ? 'text-rose-400' :
+                config.themeColor === 'amber' ? 'text-amber-400' :
+                config.themeColor === 'indigo' ? 'text-indigo-400' :
+                config.themeColor === 'slate' ? 'text-slate-400' :
+                'text-emerald-400'
+              }`}>
+                "{config.heroTitle || "دليلك للوصول إلى الأطباء والصيدليات والمعامل في مركز الوقف"}"
               </div>
-            </div>
 
+              {/* Social Media Links in Footer */}
+              {(config.socialFacebook || config.socialWhatsapp || config.socialYoutube || config.socialTwitter || config.socialInstagram) && (
+                <div className="flex items-center gap-2 pt-2">
+                  {config.socialFacebook && (
+                    <a href={config.socialFacebook} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800/80 text-slate-400 hover:text-white rounded-xl transition-all hover:bg-slate-800" title="Facebook">
+                      <LucideIcons.Facebook className="h-4 w-4" />
+                    </a>
+                  )}
+                  {config.socialWhatsapp && (
+                    <a href={config.socialWhatsapp} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800/80 text-slate-400 hover:text-white rounded-xl transition-all hover:bg-slate-800" title="WhatsApp">
+                      <LucideIcons.MessageSquare className="h-4 w-4" />
+                    </a>
+                  )}
+                  {config.socialYoutube && (
+                    <a href={config.socialYoutube} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800/80 text-slate-400 hover:text-white rounded-xl transition-all hover:bg-slate-800" title="YouTube">
+                      <LucideIcons.Youtube className="h-4 w-4" />
+                    </a>
+                  )}
+                  {config.socialTwitter && (
+                    <a href={config.socialTwitter} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800/80 text-slate-400 hover:text-white rounded-xl transition-all hover:bg-slate-800" title="Twitter / X">
+                      <LucideIcons.Twitter className="h-4 w-4" />
+                    </a>
+                  )}
+                  {config.socialInstagram && (
+                    <a href={config.socialInstagram} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800/80 text-slate-400 hover:text-white rounded-xl transition-all hover:bg-slate-800" title="Instagram">
+                      <LucideIcons.Instagram className="h-4 w-4" />
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+            
             {/* Column 2: Quick Links */}
             <div>
               <h4 className="text-white text-sm font-bold mb-4">روابط سريعة</h4>
@@ -2108,7 +2302,7 @@ export default function App() {
                 <li><button onClick={() => { setGlobalSearchQuery(''); setGlobalSearchCategory('all'); setActivePage('search'); }} className="hover:text-white hover:underline transition-colors">البحث الموحد الشامل</button></li>
               </ul>
             </div>
-
+            
             {/* Column 3: About & Contact */}
             <div>
               <h4 className="text-white text-sm font-bold mb-4">معلومات الدليل</h4>
@@ -2119,11 +2313,11 @@ export default function App() {
                 <li><button onClick={() => setActivePage('terms')} className="hover:text-white hover:underline transition-colors">الشروط والأحكام</button></li>
               </ul>
             </div>
-
+            
           </div>
-
+          
           <div className="mt-12 pt-8 border-t border-slate-800 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="font-semibold">© {new Date().getFullYear()} دليل الوقف الطبي الإلكتروني. جميع الحقوق محفوظة لخدمة أهالي الوقف الكرام.</p>
+            <p className="font-semibold">© {new Date().getFullYear()} {config.siteName || "دليل الوقف الطبي الإلكتروني"}. جميع الحقوق محفوظة لخدمة أهالي الوقف الكرام.</p>
             <p className="text-[11px] text-slate-600 font-mono">تم التطوير بكل فخر لدعم أهالي مركز الوقف - محافظة قنا.</p>
           </div>
         </div>

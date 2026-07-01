@@ -8,6 +8,357 @@ import { Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest }
 import { db } from '../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
+interface RequestStatusCardProps {
+  key?: React.Key;
+  req: DoctorRequest;
+  doctors: Doctor[];
+  pharmacies: Pharmacy[];
+  labs: Lab[];
+  onUpdateDoctors: (docs: Doctor[]) => void;
+  onUpdatePharmacies: (pharms: Pharmacy[]) => void;
+  onUpdateLabs: (labs: Lab[]) => void;
+  onUpdateDoctorRequests: (reqs: DoctorRequest[]) => void;
+  onAddLog: (action: string, type: any, details: string) => void;
+  onShowToast: (msg: string) => void;
+  onStartEditing: (req: DoctorRequest) => void;
+  onDeleteRequest: (id: string, name: string) => Promise<void>;
+  handleUpdateRequestStatus: (id: string, newStatus: DoctorRequest['status'], adminNotes: string, rejectionReason?: string) => Promise<void>;
+}
+
+function RequestStatusCard({
+  req, doctors, pharmacies, labs,
+  onUpdateDoctors, onUpdatePharmacies, onUpdateLabs, onUpdateDoctorRequests,
+  onAddLog, onShowToast, onStartEditing, onDeleteRequest, handleUpdateRequestStatus
+}: RequestStatusCardProps) {
+  const [selectedStatus, setSelectedStatus] = useState<DoctorRequest['status']>(req.status || 'pending');
+  const [adminNotesInput, setAdminNotesInput] = useState(req.adminNotes || '');
+  const [rejectionReason, setRejectionReason] = useState(req.rejectionReason || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const serviceTypeLabels: Record<string, string> = {
+    doctor: 'طبيب',
+    pharmacy: 'صيدلية',
+    lab: 'معمل تحاليل',
+    scan_center: 'مركز أشعة',
+    hospital: 'مستشفى',
+    physiotherapy: 'مركز علاج طبيعي',
+    other: 'خدمة طبية أخرى'
+  };
+  const typeLabel = serviceTypeLabels[req.serviceType || 'doctor'] || 'خدمة طبية';
+
+  const statusColors: Record<string, { bg: string, text: string, border: string, label: string }> = {
+    pending: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', label: 'قيد المراجعة والتدقيق الإداري' },
+    contacting: { bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-200', label: 'جاري التواصل مع مقدم الطلب' },
+    reviewing_data: { bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-200', label: 'جاري مراجعة البيانات' },
+    incomplete_data: { bg: 'bg-rose-50', text: 'text-rose-800', border: 'border-rose-200', label: 'البيانات غير مكتملة' },
+    awaiting_completion: { bg: 'bg-orange-50', text: 'text-orange-800', border: 'border-orange-200', label: 'بانتظار استكمال البيانات' },
+    accepted: { bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-200', label: 'مقبول (قيد النشر والتهيئة)' },
+    published: { bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-200', label: 'منشور بالدليل العام' },
+    rejected: { bg: 'bg-red-50', text: 'text-red-800', border: 'border-red-200', label: 'مرفوض' },
+    cancelled: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', label: 'ملغي' },
+    archived: { bg: 'bg-zinc-100', text: 'text-zinc-600', border: 'border-zinc-300', label: 'مؤرشف ومغلق' },
+  };
+
+  const currentStyle = statusColors[req.status || 'pending'] || statusColors.pending;
+
+  const handleStatusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUpdating(true);
+    try {
+      await handleUpdateRequestStatus(req.id, selectedStatus, adminNotesInput, selectedStatus === 'rejected' ? rejectionReason : undefined);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-150 p-5 shadow-sm space-y-4 animate-fadeIn hover:border-slate-300 transition-colors">
+      
+      {/* Row 1: Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 border-slate-100">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-mono text-xs font-black text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border">
+            ID: {req.id}
+          </span>
+          <span className="bg-emerald-50 text-emerald-800 text-[10.5px] font-black px-2.5 py-1 rounded-lg border border-emerald-200">
+            {typeLabel}
+          </span>
+          <h3 className="text-base font-extrabold text-slate-900">{req.name}</h3>
+        </div>
+        
+        <div className="flex items-center gap-2.5 justify-between sm:justify-start">
+          <span className="text-[11px] font-semibold text-slate-400">
+            {new Date(req.createdAt).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}
+          </span>
+          <span className={`text-[10.5px] font-black px-3 py-1 rounded-full border ${currentStyle.bg} ${currentStyle.text} ${currentStyle.border}`}>
+            {currentStyle.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Row 2: Details metadata */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs font-semibold text-slate-600 bg-slate-50 p-4 rounded-xl">
+        <div>
+          <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">نوع الخدمة</span>
+          <span className="text-slate-800 font-bold">{typeLabel}</span>
+        </div>
+
+        {(!req.serviceType || req.serviceType === 'doctor') && (
+          <>
+            <div>
+              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">التخصص</span>
+              <span className="text-slate-800 font-bold">{req.specialty || 'تخصص عام'}</span>
+            </div>
+            <div>
+              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">العيادة</span>
+              <span className="text-slate-800 font-bold">{req.clinicName || 'عيادة خاصة'}</span>
+            </div>
+          </>
+        )}
+        {req.serviceType === 'pharmacy' && (
+          <>
+            <div>
+              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">الصيدلي المسؤول</span>
+              <span className="text-slate-800 font-bold">{req.pharmacistName || 'غير محدد'}</span>
+            </div>
+            <div>
+              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">نوع الدليل</span>
+              <span className="text-slate-800 font-bold">دليل الصيدليات</span>
+            </div>
+          </>
+        )}
+        {req.serviceType === 'other' && (
+          <div className="sm:col-span-2">
+            <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">وصف الخدمة</span>
+            <span className="text-slate-800 font-bold block truncate">{req.shortDescription || 'لا يوجد وصف'}</span>
+          </div>
+        )}
+        {req.serviceType !== 'doctor' && req.serviceType !== 'pharmacy' && req.serviceType !== 'other' && (
+          <>
+            <div>
+              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">المرفق الطبي</span>
+              <span className="text-slate-800 font-bold">{typeLabel}</span>
+            </div>
+            <div>
+              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">نوع الدليل</span>
+              <span className="text-slate-800 font-bold">دليل المرافق والخدمات</span>
+            </div>
+          </>
+        )}
+
+        <div>
+          <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">الهاتف للتواصل</span>
+          <span className="font-mono text-left block text-emerald-600 font-bold" dir="ltr">{req.phone}</span>
+        </div>
+        <div>
+          <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">العنوان بالتفصيل</span>
+          <span className="text-slate-800 font-bold truncate block">{req.address}</span>
+        </div>
+      </div>
+
+      {/* Notes Display */}
+      {req.notes && (
+        <div className="bg-amber-50/30 border border-amber-100 p-3 rounded-xl text-xs text-slate-700 leading-relaxed font-semibold">
+          💡 <span className="font-extrabold text-amber-900">ملاحظات مقدم الطلب عند الإرسال:</span> {req.notes}
+        </div>
+      )}
+
+      {req.rejectionReason && (
+        <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-3 text-xs text-rose-800 leading-relaxed font-bold">
+          ⚠️ سبب الرفض الموجه للزائر: {req.rejectionReason}
+        </div>
+      )}
+
+      {req.adminNotes && (
+        <div className="bg-slate-50 border border-slate-150 rounded-xl p-3 text-xs text-slate-700 leading-relaxed font-semibold">
+          📝 <span className="font-extrabold text-slate-800">ملاحظات المتابعة الإدارية الحالية:</span> {req.adminNotes}
+        </div>
+      )}
+
+      {/* Collapsible Timeline tracking history logs */}
+      <div className="border-t pt-3">
+        <button
+          type="button"
+          onClick={() => setShowHistory(!showHistory)}
+          className="text-xs font-bold text-slate-500 hover:text-emerald-600 flex items-center gap-1 transition-all"
+        >
+          <Clock className="h-3.5 w-3.5" />
+          <span>{showHistory ? 'إخفاء سجل المعالجة الزمني' : `عرض سجل تتبع معالجة الطلب (${req.history?.length || 0} تغييرات)`}</span>
+        </button>
+
+        {showHistory && (
+          <div className="mt-3 bg-slate-50 border border-slate-150 rounded-xl p-4 space-y-3.5 animate-fadeIn">
+            <h4 className="text-xs font-extrabold text-slate-800 border-b pb-1.5 flex items-center gap-1">
+              <span>📜 سجل تتبع الطلب التاريخي</span>
+              <span className="text-[10px] font-semibold text-slate-400">(يظهر للزائر لمتابعة طلبه)</span>
+            </h4>
+            
+            <div className="relative border-r-2 border-slate-200 pr-4 mr-2 space-y-4 text-xs">
+              {/* Submission event */}
+              <div className="relative">
+                <span className="absolute -right-[23px] top-0.5 bg-slate-200 border-2 border-white rounded-full h-3 w-3 inline-block"></span>
+                <p className="font-bold text-slate-800">تم تقديم الطلب بنجاح عبر موقع المنصة</p>
+                <span className="text-[10px] font-semibold text-slate-400">
+                  {new Date(req.createdAt).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}
+                </span>
+              </div>
+
+              {/* Mapped history events */}
+              {req.history && req.history.map((hist, idx) => {
+                const histStyle = statusColors[hist.status] || statusColors.pending;
+                return (
+                  <div key={idx} className="relative">
+                    <span className="absolute -right-[23px] top-0.5 bg-emerald-500 border-2 border-white rounded-full h-3 w-3 inline-block"></span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-800">تحديث الحالة إلى:</span>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${histStyle.bg} ${histStyle.text} ${histStyle.border}`}>
+                        {histStyle.label}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-400 bg-white border rounded px-1.5 py-0.5">
+                        بواسطة: {hist.updatedBy || 'مدير النظام'}
+                      </span>
+                    </div>
+                    {hist.notes && (
+                      <p className="text-slate-600 mt-1 font-semibold text-[11px] leading-relaxed">
+                        📝 {hist.notes}
+                      </p>
+                    )}
+                    <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">
+                      {new Date(hist.timestamp).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Advanced inline form to modify request status */}
+      <form onSubmit={handleStatusSubmit} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+          <span className="p-0.5 bg-emerald-50 text-emerald-600 rounded">⚙️</span>
+          <span>تغيير الحالة الإدارية وكتابة ملاحظات التتبع</span>
+        </h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Status select option list */}
+          <div>
+            <label className="block text-[10px] font-black text-slate-500 mb-1">الحالة الإدارية الجديدة</label>
+            <select
+              value={selectedStatus}
+              onChange={e => setSelectedStatus(e.target.value as any)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-700 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            >
+              <option value="pending">قيد المراجعة والتدقيق الإداري</option>
+              <option value="contacting">جاري التواصل مع مقدم الطلب</option>
+              <option value="reviewing_data">جاري مراجعة البيانات</option>
+              <option value="incomplete_data">البيانات غير مكتملة</option>
+              <option value="awaiting_completion">بانتظار استكمال البيانات</option>
+              <option value="accepted">مقبول (قيد النشر والتهيئة)</option>
+              <option value="published">منشور بالدليل العام</option>
+              <option value="rejected">مرفوض</option>
+              <option value="cancelled">ملغي</option>
+              <option value="archived">مؤرشف ومغلق</option>
+            </select>
+          </div>
+
+          {/* Admin notes input field */}
+          <div className="md:col-span-2">
+            <label className="block text-[10px] font-black text-slate-500 mb-1">ملاحظات المتابعة (سجل التتبع)</label>
+            <input
+              type="text"
+              value={adminNotesInput}
+              onChange={e => setAdminNotesInput(e.target.value)}
+              placeholder="مثال: تم الاتصال بمقدم الطلب وتأكيد مواعيد العمل..."
+              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-semibold placeholder:text-slate-400 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* If rejected is selected, require detailed rejection reason */}
+        {selectedStatus === 'rejected' && (
+          <div className="animate-fadeIn">
+            <label className="block text-[10px] font-black text-rose-600 mb-1">سبب الرفض الموجه لمقدم الطلب (مطلوب) *</label>
+            <input
+              type="text"
+              required
+              value={rejectionReason}
+              onChange={e => setRejectionReason(e.target.value)}
+              placeholder="مثال: المستندات الطبية المرفقة غير واضحة يرجى إعادة التقديم..."
+              className="w-full bg-white border border-rose-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-rose-900 placeholder:text-slate-400 focus:ring-1 focus:ring-rose-500 focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button
+            type="submit"
+            disabled={isUpdating}
+            className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white text-[11px] font-extrabold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1 transition-all"
+          >
+            <Save className="h-3 w-3" />
+            <span>{isUpdating ? 'جاري التحديث...' : 'تثبيت الحالة وحفظ الملاحظات'}</span>
+          </button>
+        </div>
+      </form>
+
+      {/* Row 3: Action Buttons */}
+      <div className="flex flex-wrap justify-between items-center gap-3 border-t pt-3 border-slate-100 text-xs">
+        <div className="flex gap-2">
+          {/* Edit request data */}
+          <button
+            type="button"
+            onClick={() => onStartEditing(req)}
+            className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
+          >
+            <Edit2 className="h-3.5 w-3.5 text-slate-500" />
+            <span>تعديل البيانات</span>
+          </button>
+
+          {/* Delete request */}
+          <button
+            type="button"
+            onClick={() => onDeleteRequest(req.id, req.name)}
+            className="bg-rose-50/60 hover:bg-rose-100/80 text-rose-700 border border-rose-100 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+            <span>حذف نهائياً</span>
+          </button>
+        </div>
+
+        {/* Quick action shortcuts */}
+        <div className="flex gap-2">
+          {req.status !== 'published' && (
+            <button
+              type="button"
+              onClick={() => handleUpdateRequestStatus(req.id, 'published', 'تم النشر والقبول الفوري في الدليل العام.')}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-extrabold shadow-sm flex items-center gap-1 transition-all"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>نشر فوري</span>
+            </button>
+          )}
+
+          {req.status === 'pending' && (
+            <button
+              type="button"
+              onClick={() => handleUpdateRequestStatus(req.id, 'accepted', 'تم القبول المبدئي للطلب وجاري إعداد بطاقة النشر.')}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-sm transition-colors"
+            >
+              قبول مبدئي
+            </button>
+          )}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
 interface AdminPanelProps {
   adminLoggedIn: boolean;
   onLogin: (pass: string) => boolean;
@@ -26,6 +377,7 @@ interface AdminPanelProps {
   onUpdateSpecialties: (specs: string[]) => void;
   onUpdateAds: (ads: Ad[]) => void;
   onUpdateConfig: (cfg: HomePageConfig) => void;
+  onSaveConfig?: (cfg: HomePageConfig) => Promise<void>;
   onUpdateDoctorRequests: (reqs: DoctorRequest[]) => void;
   onAddLog: (action: string, type: 'doctor' | 'pharmacy' | 'lab' | 'specialty' | 'ad' | 'system' | 'backup', details: string) => void;
   onShowToast: (msg: string) => void;
@@ -34,7 +386,7 @@ interface AdminPanelProps {
 export default function AdminPanel({
   adminLoggedIn, onLogin, onLogout,
   doctors, pharmacies, labs, specialties, ads, logs, config, doctorRequests,
-  onUpdateDoctors, onUpdatePharmacies, onUpdateLabs, onUpdateSpecialties, onUpdateAds, onUpdateConfig,
+  onUpdateDoctors, onUpdatePharmacies, onUpdateLabs, onUpdateSpecialties, onUpdateAds, onUpdateConfig, onSaveConfig,
   onUpdateDoctorRequests, onAddLog, onShowToast
 }: AdminPanelProps) {
   
@@ -53,6 +405,8 @@ export default function AdminPanel({
 
   // Doctor Addition Requests Management States
   const [requestSearch, setRequestSearch] = useState('');
+  const [requestStatusFilter, setRequestStatusFilter] = useState<string>('all');
+  const [requestServiceTypeFilter, setRequestServiceTypeFilter] = useState<string>('all');
   const [rejectionId, setRejectionId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -72,6 +426,7 @@ export default function AdminPanel({
   
   // File upload ref for database restoration
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,157 +439,174 @@ export default function AdminPanel({
   };
 
   // --- ACTIONS FOR SERVICE ADDITION REQUESTS ---
-  const acceptAndPublishRequest = async (req: DoctorRequest) => {
-    const serviceType = req.serviceType || 'doctor';
-    const typeLabels: Record<string, string> = {
-      doctor: 'طبيب',
-      pharmacy: 'صيدلية',
-      lab: 'معمل تحاليل',
-      scan_center: 'مركز أشعة',
-      hospital: 'مستشفى',
-      physiotherapy: 'مركز علاج طبيعي',
-      other: 'خدمة طبية أخرى'
-    };
-    const currentTypeLabel = typeLabels[serviceType] || 'خدمة طبية';
-
-    try {
-      console.log(`Firebase: Accepting and publishing request ${req.id} of type ${serviceType}...`);
-      let newId = '';
-
-      if (serviceType === 'doctor') {
-        newId = `doc-${Date.now()}`;
-        const newDoc: Doctor = {
-          id: newId,
-          name: req.name,
-          specialty: req.specialty || 'تخصص عام',
-          clinicName: req.clinicName || 'عيادة خاصة',
-          address: req.address,
-          phone: req.phone,
-          whatsapp: req.phone,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'doctors', newId), newDoc);
-        console.log(`Firebase: Saved doctor document ${newId}`);
-        onUpdateDoctors([newDoc, ...doctors]);
-        onAddLog('إضافة', 'doctor', `تم قبول ونشر بيانات الطبيب الجديد: ${req.name} من طلب الرقم: ${req.id}`);
-        onShowToast(`🎉 تم قبول ونشر الطبيب "${req.name}" في الدليل بنجاح!`);
-      } else if (serviceType === 'pharmacy') {
-        newId = `pharm-${Date.now()}`;
-        const displayName = req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : '');
-        const newPharm: Pharmacy = {
-          id: newId,
-          name: displayName,
-          address: req.address,
-          phone: req.phone,
-          whatsapp: req.phone,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'pharmacies', newId), newPharm);
-        console.log(`Firebase: Saved pharmacy document ${newId}`);
-        onUpdatePharmacies([newPharm, ...pharmacies]);
-        onAddLog('إضافة', 'pharmacy', `تم قبول ونشر الصيدلية الجديدة: ${req.name} من طلب الرقم: ${req.id}`);
-        onShowToast(`🎉 تم قبول ونشر صيدلية "${req.name}" في الدليل بنجاح!`);
-      } else if (serviceType === 'lab' || serviceType === 'scan_center') {
-        newId = `lab-${Date.now()}`;
-        const suffix = serviceType === 'scan_center' ? ' (مركز أشعة)' : '';
-        const newLab: Lab = {
-          id: newId,
-          name: req.name + suffix,
-          address: req.address,
-          phone: req.phone,
-          whatsapp: req.phone,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'labs', newId), newLab);
-        console.log(`Firebase: Saved lab document ${newId}`);
-        onUpdateLabs([newLab, ...labs]);
-        onAddLog('إضافة', 'lab', `تم قبول ونشر ${currentTypeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
-        onShowToast(`🎉 تم قبول ونشر ${currentTypeLabel} "${req.name}" في الدليل بنجاح!`);
-      } else if (serviceType === 'hospital') {
-        newId = `doc-${Date.now()}`;
-        const newDoc: Doctor = {
-          id: newId,
-          name: req.name,
-          specialty: 'مستشفى / مركز طبي',
-          clinicName: 'قسم الاستقبال والطوارئ',
-          address: req.address,
-          phone: req.phone,
-          whatsapp: req.phone,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'doctors', newId), newDoc);
-        console.log(`Firebase: Saved hospital doctor document ${newId}`);
-        onUpdateDoctors([newDoc, ...doctors]);
-        onAddLog('إضافة', 'doctor', `تم قبول ونشر مستشفى جديد: ${req.name} من طلب الرقم: ${req.id}`);
-        onShowToast(`🎉 تم قبول ونشر مستشفى "${req.name}" في الدليل بنجاح!`);
-      } else if (serviceType === 'physiotherapy') {
-        newId = `doc-${Date.now()}`;
-        const newDoc: Doctor = {
-          id: newId,
-          name: req.name,
-          specialty: 'علاج طبيعي وتأهيل',
-          clinicName: 'مركز علاج طبيعي',
-          address: req.address,
-          phone: req.phone,
-          whatsapp: req.phone,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'doctors', newId), newDoc);
-        console.log(`Firebase: Saved physiotherapy doctor document ${newId}`);
-        onUpdateDoctors([newDoc, ...doctors]);
-        onAddLog('إضافة', 'doctor', `تم قبول ونشر مركز علاج طبيعي: ${req.name} من طلب الرقم: ${req.id}`);
-        onShowToast(`🎉 تم قبول ونشر مركز العلاج الطبيعي "${req.name}" في الدليل بنجاح!`);
-      } else {
-        newId = `doc-${Date.now()}`;
-        const newDoc: Doctor = {
-          id: newId,
-          name: req.name,
-          specialty: req.shortDescription || 'خدمة طبية أخرى',
-          clinicName: 'خدمات طبية عامة',
-          address: req.address,
-          phone: req.phone,
-          whatsapp: req.phone,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'doctors', newId), newDoc);
-        console.log(`Firebase: Saved other doctor document ${newId}`);
-        onUpdateDoctors([newDoc, ...doctors]);
-        onAddLog('إضافة', 'doctor', `تم قبول ونشر خدمة طبية أخرى: ${req.name} من طلب الرقم: ${req.id}`);
-        onShowToast(`🎉 تم قبول ونشر الخدمة "${req.name}" في الدليل بنجاح!`);
-      }
-
-      // Update the request status to published in requests collection
-      const updatedReq = { ...req, status: 'published' as const };
-      await setDoc(doc(db, 'requests', req.id), updatedReq);
-      console.log(`Firebase: Request ${req.id} status updated to published successfully.`);
-
-      const updatedRequests = doctorRequests.map(r => r.id === req.id ? updatedReq : r);
-      onUpdateDoctorRequests(updatedRequests);
-    } catch (error: any) {
-      console.error(`Firebase Error accepting and publishing request ${req.id}:`, error);
-      alert(`❌ فشل قبول ونشر الخدمة في قاعدة البيانات: ${error.message || error}`);
-    }
-  };
-
-  const acceptRequestOnly = async (id: string, name: string) => {
+  const handleUpdateRequestStatus = async (id: string, newStatus: DoctorRequest['status'], adminNotes: string, rejectionReason?: string) => {
     const req = doctorRequests.find(r => r.id === id);
     if (!req) return;
 
     try {
-      console.log(`Firebase: Setting request status to accepted for request ${id}...`);
-      const updatedReq = { ...req, status: 'accepted' as const };
+      console.log(`Unified Status Change: Request ${id} to ${newStatus}...`);
+      const serviceType = req.serviceType || 'doctor';
+      const typeLabels: Record<string, string> = {
+        doctor: 'طبيب',
+        pharmacy: 'صيدلية',
+        lab: 'معمل تحاليل',
+        scan_center: 'مركز أشعة',
+        hospital: 'مستشفى',
+        physiotherapy: 'مركز علاج طبيعي',
+        other: 'خدمة طبية أخرى'
+      };
+      const currentTypeLabel = typeLabels[serviceType] || 'خدمة طبية';
+
+      // If transition to 'published' and not already published, add listing to the respective collection
+      if (newStatus === 'published' && req.status !== 'published') {
+        let newId = '';
+
+        if (serviceType === 'doctor') {
+          newId = `doc-${Date.now()}`;
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: req.specialty || 'تخصص عام',
+            clinicName: req.clinicName || 'عيادة خاصة',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر بيانات الطبيب الجديد: ${req.name} من طلب الرقم: ${req.id}`);
+        } else if (serviceType === 'pharmacy') {
+          newId = `pharm-${Date.now()}`;
+          const displayName = req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : '');
+          const newPharm: Pharmacy = {
+            id: newId,
+            name: displayName,
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'pharmacies', newId), newPharm);
+          onUpdatePharmacies([newPharm, ...pharmacies]);
+          onAddLog('إضافة', 'pharmacy', `تم قبول ونشر الصيدلية الجديدة: ${req.name} من طلب الرقم: ${req.id}`);
+        } else if (serviceType === 'lab' || serviceType === 'scan_center') {
+          newId = `lab-${Date.now()}`;
+          const suffix = serviceType === 'scan_center' ? ' (مركز أشعة)' : '';
+          const newLab: Lab = {
+            id: newId,
+            name: req.name + suffix,
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'labs', newId), newLab);
+          onUpdateLabs([newLab, ...labs]);
+          onAddLog('إضافة', 'lab', `تم قبول ونشر ${currentTypeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
+        } else if (serviceType === 'hospital') {
+          newId = `doc-${Date.now()}`;
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: 'مستشفى / مركز طبي',
+            clinicName: 'قسم الاستقبال والطوارئ',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر مستشفى جديد: ${req.name} من طلب الرقم: ${req.id}`);
+        } else if (serviceType === 'physiotherapy') {
+          newId = `doc-${Date.now()}`;
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: 'علاج طبيعي وتأهيل',
+            clinicName: 'مركز علاج طبيعي',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر مركز علاج طبيعي: ${req.name} من طلب الرقم: ${req.id}`);
+        } else {
+          newId = `doc-${Date.now()}`;
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: req.shortDescription || 'خدمة طبية أخرى',
+            clinicName: 'خدمات طبية عامة',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر خدمة طبية أخرى: ${req.name} من طلب الرقم: ${req.id}`);
+        }
+      }
+
+      const historyEntry = {
+        timestamp: new Date().toISOString(),
+        status: newStatus,
+        updatedBy: "مدير النظام",
+        notes: adminNotes || rejectionReason || 'تم تحديث حالة الطلب.'
+      };
+
+      const updatedReq: DoctorRequest = {
+        ...req,
+        status: newStatus,
+        updatedAt: new Date().toISOString(),
+        adminNotes: adminNotes || req.adminNotes || '',
+        rejectionReason: rejectionReason || req.rejectionReason || '',
+        history: [
+          ...(req.history || []),
+          historyEntry
+        ]
+      };
+
       await setDoc(doc(db, 'requests', id), updatedReq);
-      console.log(`Firebase: Request ${id} status updated to accepted successfully.`);
+      console.log(`Firebase: Request ${id} status updated to ${newStatus} with history entry.`);
 
       const updatedRequests = doctorRequests.map(r => r.id === id ? updatedReq : r);
       onUpdateDoctorRequests(updatedRequests);
 
-      onAddLog('تعديل', 'system', `تم قبول طلب إضافة: ${name} (في انتظار النشر)`);
-      onShowToast(`✅ تم تغيير حالة طلب الإضافة إلى "مقبول".`);
+      onAddLog('تعديل', 'system', `تم تحديث حالة طلب إضافة: ${req.name} إلى [${newStatus}]`);
+      onShowToast(`✅ تم تحديث حالة الطلب بنجاح إلى "${getStatusLabelArabic(newStatus)}".`);
     } catch (error: any) {
-      console.error(`Firebase Error accepting request ${id}:`, error);
-      alert(`❌ فشل قبول الطلب في قاعدة البيانات: ${error.message || error}`);
+      console.error(`Firebase Error updating request status ${id}:`, error);
+      alert(`❌ فشل تحديث حالة الطلب في قاعدة البيانات: ${error.message || error}`);
     }
+  };
+
+  const getStatusLabelArabic = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: 'قيد المراجعة والتدقيق الإداري',
+      contacting: 'جاري التواصل مع مقدم الطلب',
+      reviewing_data: 'جاري مراجعة البيانات',
+      incomplete_data: 'البيانات غير مكتملة',
+      awaiting_completion: 'بانتظار استكمال البيانات',
+      accepted: 'مقبول (قيد النشر والتهيئة)',
+      published: 'منشور بالدليل العام',
+      rejected: 'مرفوض',
+      cancelled: 'ملغي',
+      archived: 'مؤرشف ومغلق'
+    };
+    return labels[status] || status;
+  };
+
+  const acceptAndPublishRequest = async (req: DoctorRequest) => {
+    await handleUpdateRequestStatus(req.id, 'published', 'تم قبول ونشر الخدمة في الدليل مباشرة.');
+  };
+
+  const acceptRequestOnly = async (id: string, name: string) => {
+    await handleUpdateRequestStatus(id, 'accepted', 'تم القبول المبدئي للطلب وجاري العمل على مراجعته وتهيئة بطاقة النشر.');
   };
 
   const submitRejection = async (e: React.FormEvent) => {
@@ -243,27 +615,9 @@ export default function AdminPanel({
       onShowToast('⚠️ يرجى كتابة سبب الرفض أولاً.');
       return;
     }
-
-    const req = doctorRequests.find(r => r.id === rejectionId);
-    if (!req) return;
-
-    try {
-      console.log(`Firebase: Setting request status to rejected for request ${rejectionId}...`);
-      const updatedReq = { ...req, status: 'rejected' as const, rejectionReason: rejectionReasonInput };
-      await setDoc(doc(db, 'requests', rejectionId), updatedReq);
-      console.log(`Firebase: Request ${rejectionId} status updated to rejected successfully.`);
-
-      const updatedRequests = doctorRequests.map(r => r.id === rejectionId ? updatedReq : r);
-      onUpdateDoctorRequests(updatedRequests);
-
-      onAddLog('تعديل', 'system', `تم رفض طلب إضافة الخدمة: ${req.name} بسبب: ${rejectionReasonInput}`);
-      onShowToast(`❌ تم رفض طلب الخدمة مع تدوين السبب.`);
-      setRejectionId(null);
-      setRejectionReasonInput('');
-    } catch (error: any) {
-      console.error(`Firebase Error rejecting request ${rejectionId}:`, error);
-      alert(`❌ فشل رفض الطلب في قاعدة البيانات: ${error.message || error}`);
-    }
+    await handleUpdateRequestStatus(rejectionId, 'rejected', `تم رفض الطلب: ${rejectionReasonInput}`, rejectionReasonInput);
+    setRejectionId(null);
+    setRejectionReasonInput('');
   };
 
   const startEditingRequest = (req: DoctorRequest) => {
@@ -811,6 +1165,19 @@ export default function AdminPanel({
     reader.readAsText(file);
   };
 
+  const handleSaveConfigPress = async () => {
+    if (!onSaveConfig) return;
+    setIsSavingConfig(true);
+    try {
+      await onSaveConfig(config);
+      onAddLog('حفظ الإعدادات بالكامل', 'system', 'تم حفظ وتحديث إعدادات الموقع وهوية البصرية والألوان في قاعدة البيانات بنجاح.');
+    } catch (err) {
+      console.error("Error saving settings:", err);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
   // Login state check
   if (!adminLoggedIn) {
     return (
@@ -1286,36 +1653,116 @@ export default function AdminPanel({
               )}
 
               {/* Search & Filter Block */}
-              <div className="bg-white rounded-2xl border border-slate-150 p-4 shadow-sm flex items-center gap-3">
-                <Search className="h-5 w-5 text-slate-400 shrink-0" />
-                <input
-                  type="text"
-                  value={requestSearch}
-                  onChange={e => setRequestSearch(e.target.value)}
-                  placeholder="البحث برقم الطلب أو الاسم أو التخصص..."
-                  className="w-full bg-transparent border-none text-slate-800 font-medium placeholder:text-slate-400 focus:outline-none text-sm"
-                />
-                {requestSearch && (
-                  <button
-                    onClick={() => setRequestSearch('')}
-                    className="text-xs font-bold text-slate-400 hover:text-slate-600 hover:underline"
-                  >
-                    مسح البحث
-                  </button>
+              <div className="bg-white rounded-2xl border border-slate-150 p-5 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                  {/* Search bar */}
+                  <div className="flex-1 bg-slate-50 border border-slate-150 rounded-xl p-3 flex items-center gap-2.5">
+                    <Search className="h-5 w-5 text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      value={requestSearch}
+                      onChange={e => setRequestSearch(e.target.value)}
+                      placeholder="البحث برقم الطلب ID، أو اسم المنشأة، أو رقم الهاتف..."
+                      className="w-full bg-transparent border-none text-slate-800 font-semibold placeholder:text-slate-400 focus:outline-none text-sm"
+                    />
+                    {requestSearch && (
+                      <button
+                        onClick={() => setRequestSearch('')}
+                        className="text-xs font-bold text-rose-500 hover:underline"
+                      >
+                        مسح
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Service Type Filter */}
+                  <div className="w-full md:w-60">
+                    <select
+                      value={requestServiceTypeFilter}
+                      onChange={e => setRequestServiceTypeFilter(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
+                    >
+                      <option value="all">كل الخدمات الطبية</option>
+                      <option value="doctor">طبيب</option>
+                      <option value="pharmacy">صيدلية</option>
+                      <option value="lab">معمل تحاليل</option>
+                      <option value="scan_center">مركز أشعة</option>
+                      <option value="hospital">مستشفى</option>
+                      <option value="physiotherapy">مركز علاج طبيعي</option>
+                      <option value="other">خدمة طبية أخرى</option>
+                    </select>
+                  </div>
+
+                  {/* Status Filter */}
+                  <div className="w-full md:w-64">
+                    <select
+                      value={requestStatusFilter}
+                      onChange={e => setRequestStatusFilter(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
+                    >
+                      <option value="all">كل الحالات الإدارية</option>
+                      <option value="pending">قيد المراجعة والتدقيق الإداري</option>
+                      <option value="contacting">جاري التواصل مع مقدم الطلب</option>
+                      <option value="reviewing_data">جاري مراجعة البيانات</option>
+                      <option value="incomplete_data">البيانات غير مكتملة</option>
+                      <option value="awaiting_completion">بانتظار استكمال البيانات</option>
+                      <option value="accepted">مقبول (قيد النشر والتهيئة)</option>
+                      <option value="published">منشور بالدليل العام</option>
+                      <option value="rejected">مرفوض</option>
+                      <option value="cancelled">ملغي</option>
+                      <option value="archived">مؤرشف ومغلق</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Quick reset active filters row */}
+                {(requestSearch || requestStatusFilter !== 'all' || requestServiceTypeFilter !== 'all') && (
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500 bg-slate-50 p-2.5 rounded-lg border">
+                    <span>عدد الطلبات المفلترة حالياً: {doctorRequests.filter(r => {
+                      const query = requestSearch.trim().toLowerCase();
+                      const matchesQuery = !query || 
+                        r.id.toLowerCase().includes(query) || 
+                        r.name.toLowerCase().includes(query) ||
+                        (r.phone || '').toLowerCase().includes(query) ||
+                        (r.specialty || '').toLowerCase().includes(query) ||
+                        (r.pharmacistName || '').toLowerCase().includes(query) ||
+                        (r.shortDescription || '').toLowerCase().includes(query);
+                      const matchesServiceType = requestServiceTypeFilter === 'all' || r.serviceType === requestServiceTypeFilter;
+                      const matchesStatus = requestStatusFilter === 'all' || r.status === requestStatusFilter;
+                      return matchesQuery && matchesServiceType && matchesStatus;
+                    }).length} طلبات</span>
+                    <button
+                      onClick={() => {
+                        setRequestSearch('');
+                        setRequestStatusFilter('all');
+                        setRequestServiceTypeFilter('all');
+                      }}
+                      className="text-rose-600 hover:text-rose-700 font-bold hover:underline"
+                    >
+                      إعادة تعيين كافة الفلاتر
+                    </button>
+                  </div>
                 )}
               </div>
 
               {/* Requests List */}
               {(() => {
                 const query = requestSearch.trim().toLowerCase();
-                const filtered = doctorRequests.filter(r => 
-                  !query || 
-                  r.id.toLowerCase().includes(query) || 
-                  r.name.toLowerCase().includes(query) ||
-                  (r.specialty || '').toLowerCase().includes(query) ||
-                  (r.pharmacistName || '').toLowerCase().includes(query) ||
-                  (r.shortDescription || '').toLowerCase().includes(query)
-                );
+                const filtered = doctorRequests.filter(r => {
+                  const matchesQuery = !query || 
+                    r.id.toLowerCase().includes(query) || 
+                    r.name.toLowerCase().includes(query) ||
+                    (r.phone || '').toLowerCase().includes(query) ||
+                    (r.specialty || '').toLowerCase().includes(query) ||
+                    (r.pharmacistName || '').toLowerCase().includes(query) ||
+                    (r.shortDescription || '').toLowerCase().includes(query) ||
+                    (r.address || '').toLowerCase().includes(query);
+
+                  const matchesServiceType = requestServiceTypeFilter === 'all' || r.serviceType === requestServiceTypeFilter;
+                  const matchesStatus = requestStatusFilter === 'all' || r.status === requestStatusFilter;
+
+                  return matchesQuery && matchesServiceType && matchesStatus;
+                });
 
                 if (filtered.length === 0) {
                   return (
@@ -1328,196 +1775,24 @@ export default function AdminPanel({
 
                 return (
                   <div className="space-y-4">
-                    {filtered.map((req) => {
-                      const serviceTypeLabels: Record<string, string> = {
-                        doctor: 'طبيب',
-                        pharmacy: 'صيدلية',
-                        lab: 'معمل تحاليل',
-                        scan_center: 'مركز أشعة',
-                        hospital: 'مستشفى',
-                        physiotherapy: 'مركز علاج طبيعي',
-                        other: 'خدمة طبية أخرى'
-                      };
-                      const typeLabel = serviceTypeLabels[req.serviceType || 'doctor'] || 'خدمة طبية';
-
-                      return (
-                        <div key={req.id} className="bg-white rounded-2xl border border-slate-150 p-5 shadow-sm space-y-4 animate-fadeIn hover:border-slate-300 transition-colors">
-                          
-                          {/* Row 1: Header (ID, Name, Date, Status badge) */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 border-slate-100">
-                            <div className="flex flex-wrap items-center gap-3">
-                              <span className="font-mono text-xs font-black text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border">
-                                {req.id}
-                              </span>
-                              <span className="bg-emerald-50 text-emerald-800 text-[10.5px] font-black px-2.5 py-1 rounded-lg border border-emerald-200">
-                                نوع الخدمة: {typeLabel}
-                              </span>
-                              <h3 className="text-base font-extrabold text-slate-900">{req.name}</h3>
-                            </div>
-                            
-                            <div className="flex items-center gap-2.5 justify-between sm:justify-start">
-                              <span className="text-[11px] font-semibold text-slate-400">
-                                {new Date(req.createdAt).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}
-                              </span>
-                              
-                              {/* Badges */}
-                              {req.status === 'pending' && (
-                                <span className="bg-amber-50 text-amber-800 text-[10.5px] font-black px-3 py-1 rounded-full border border-amber-200">
-                                  قيد المراجعة
-                                </span>
-                              )}
-                              {req.status === 'accepted' && (
-                                <span className="bg-blue-50 text-blue-800 text-[10.5px] font-black px-3 py-1 rounded-full border border-blue-200">
-                                  مقبول (قيد النشر)
-                                </span>
-                              )}
-                              {req.status === 'published' && (
-                                <span className="bg-emerald-50 text-emerald-800 text-[10.5px] font-black px-3 py-1 rounded-full border border-emerald-200">
-                                  منشور بالدليل العام
-                                </span>
-                              )}
-                              {req.status === 'rejected' && (
-                                <span className="bg-rose-50 text-rose-800 text-[10.5px] font-black px-3 py-1 rounded-full border border-rose-200">
-                                  مرفوض
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Row 2: Details metadata */}
-                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs font-semibold text-slate-600 bg-slate-50 p-4 rounded-xl">
-                            <div>
-                              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">نوع الطلب</span>
-                              <span className="text-slate-800 font-bold">{typeLabel}</span>
-                            </div>
-
-                            {(!req.serviceType || req.serviceType === 'doctor') && (
-                              <>
-                                <div>
-                                  <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">التخصص</span>
-                                  <span className="text-slate-800 font-bold">{req.specialty || 'تخصص عام'}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">العيادة</span>
-                                  <span className="text-slate-800 font-bold">{req.clinicName || 'عيادة خاصة'}</span>
-                                </div>
-                              </>
-                            )}
-                            {req.serviceType === 'pharmacy' && (
-                              <>
-                                <div>
-                                  <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">الصيدلي المسؤول</span>
-                                  <span className="text-slate-800 font-bold">{req.pharmacistName || 'غير محدد'}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">نوع الدليل</span>
-                                  <span className="text-slate-800 font-bold">دليل الصيدليات</span>
-                                </div>
-                              </>
-                            )}
-                            {req.serviceType === 'other' && (
-                              <div className="sm:col-span-2">
-                                <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">وصف الخدمة</span>
-                                <span className="text-slate-800 font-bold block truncate">{req.shortDescription || 'لا يوجد وصف'}</span>
-                              </div>
-                            )}
-                            {req.serviceType !== 'doctor' && req.serviceType !== 'pharmacy' && req.serviceType !== 'other' && (
-                              <>
-                                <div>
-                                  <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">المرفق الطبي</span>
-                                  <span className="text-slate-800 font-bold">{typeLabel}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">نوع الدليل</span>
-                                  <span className="text-slate-800 font-bold">المعامل ومراكز الأشعة</span>
-                                </div>
-                              </>
-                            )}
-
-                            <div>
-                              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">الهاتف</span>
-                              <span className="font-mono text-left block text-emerald-600 font-bold" dir="ltr">{req.phone}</span>
-                            </div>
-                            <div>
-                              <span className="text-[9.5px] font-black text-slate-400 block mb-0.5">العنوان بالتفصيل</span>
-                              <span className="text-slate-800 font-bold truncate block">{req.address}</span>
-                            </div>
-                          </div>
-
-                          {/* Optional notes/rejection display */}
-                          {req.notes && (
-                            <div className="text-xs text-slate-500 leading-relaxed font-semibold">
-                              💡 <span className="font-bold text-slate-700">ملاحظات مقدم الطلب:</span> {req.notes}
-                            </div>
-                          )}
-
-                          {req.status === 'rejected' && req.rejectionReason && (
-                            <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-3 text-xs text-rose-800 leading-relaxed font-bold">
-                              ⚠️ سبب الرفض الموجه للزائر: {req.rejectionReason}
-                            </div>
-                          )}
-
-                          {/* Row 3: Action Buttons */}
-                          <div className="flex flex-wrap justify-between items-center gap-3 border-t pt-3.5 border-slate-100">
-                            
-                            <div className="flex gap-2.5">
-                              {/* Edit request data */}
-                              <button
-                                onClick={() => startEditingRequest(req)}
-                                className="text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
-                              >
-                                <Edit2 className="h-3.5 w-3.5 text-slate-500" />
-                                <span>تعديل</span>
-                              </button>
-
-                              {/* Delete request */}
-                              <button
-                                onClick={() => deleteDoctorRequest(req.id, req.name)}
-                                className="text-xs bg-rose-50/60 hover:bg-rose-100/80 text-rose-700 border border-rose-100 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                                <span>حذف</span>
-                              </button>
-                            </div>
-
-                            <div className="flex gap-2.5">
-                              {/* Accept request & publish (Immediate add to database) */}
-                              {req.status !== 'published' && (
-                                <button
-                                  onClick={() => acceptAndPublishRequest(req)}
-                                  className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-extrabold shadow-sm flex items-center gap-1 transition-all"
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  <span>قبول ونشر بالدليل مباشرة</span>
-                                </button>
-                              )}
-
-                              {/* Accept only (accepted status) */}
-                              {req.status === 'pending' && (
-                                <button
-                                  onClick={() => acceptRequestOnly(req.id, req.name)}
-                                  className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3.5 py-1.5 rounded-lg font-bold shadow-sm transition-colors"
-                                >
-                                  قبول مؤقت
-                                </button>
-                              )}
-
-                              {/* Reject request action */}
-                              {req.status !== 'rejected' && req.status !== 'published' && (
-                                <button
-                                  onClick={() => setRejectionId(req.id)}
-                                  className="text-xs bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg font-bold shadow-sm transition-colors"
-                                >
-                                  رفض الطلب
-                                </button>
-                              )}
-                            </div>
-
-                          </div>
-
-                        </div>
-                      );
-                    })}
+                    {filtered.map((req) => (
+                      <RequestStatusCard
+                        key={req.id}
+                        req={req}
+                        doctors={doctors}
+                        pharmacies={pharmacies}
+                        labs={labs}
+                        onUpdateDoctors={onUpdateDoctors}
+                        onUpdatePharmacies={onUpdatePharmacies}
+                        onUpdateLabs={onUpdateLabs}
+                        onUpdateDoctorRequests={onUpdateDoctorRequests}
+                        onAddLog={onAddLog}
+                        onShowToast={onShowToast}
+                        onStartEditing={startEditingRequest}
+                        onDeleteRequest={deleteDoctorRequest}
+                        handleUpdateRequestStatus={handleUpdateRequestStatus}
+                      />
+                    ))}
                   </div>
                 );
               })()}
@@ -2144,7 +2419,22 @@ export default function AdminPanel({
           {/* TAB 7: SETTINGS & BACKUP */}
           {activeSubTab === 'settings' && (
             <div className="space-y-6 animate-fadeIn">
-              <h2 className="text-xl font-bold text-slate-900 border-b pb-2">النسخ الاحتياطي واستعادة البيانات</h2>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">النسخ الاحتياطي وإعدادات المنصة الشاملة</h2>
+                  <p className="text-slate-500 text-xs mt-1 font-semibold leading-relaxed">
+                    تحكم في هوية المنصة، الألوان، محتوى الصفحات الفرعية وترتيب الأقسام. اضغط حفظ الإعدادات لتأكيد التغييرات.
+                  </p>
+                </div>
+                <button
+                  onClick={handleSaveConfigPress}
+                  disabled={isSavingConfig}
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-extrabold text-sm py-2.5 px-6 rounded-xl shadow-md shadow-emerald-100 flex items-center gap-2 transition-all shrink-0"
+                >
+                  <Save className="h-4.5 w-4.5" />
+                  <span>{isSavingConfig ? 'جاري الحفظ...' : 'حفظ الإعدادات بالكامل'}</span>
+                </button>
+              </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {/* Backup Box */}
@@ -2666,6 +2956,18 @@ export default function AdminPanel({
                       placeholder="@Alhawi92682905"
                     />
                   </div>
+                </div>
+
+                {/* Footer Save Button Block */}
+                <div className="pt-6 border-t flex justify-end">
+                  <button
+                    onClick={handleSaveConfigPress}
+                    disabled={isSavingConfig}
+                    className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-extrabold text-sm py-2.5 px-6 rounded-xl shadow-md shadow-emerald-100 flex items-center gap-2 transition-all shrink-0"
+                  >
+                    <Save className="h-4.5 w-4.5" />
+                    <span>{isSavingConfig ? 'جاري حفظ التعديلات...' : 'حفظ كافة الإعدادات'}</span>
+                  </button>
                 </div>
               </div>
             </div>
