@@ -133,6 +133,20 @@ export interface DoctorRequest {
   history?: RequestHistory[];
 }
 
+export interface ContactMessage {
+  id?: string; // Optional helper for list operations if needed
+  messageId: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: 'new' | 'read' | 'replied' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 export const INITIAL_SPECIALTIES: string[] = [
   'أطفال وحديثي الولادة',
   'باطنة عامة وجهاز هضمي',

@@ -4,8 +4,8 @@ import {
   Activity, CheckCircle2, AlertTriangle, Settings, RefreshCw, FileText, Check, PlusCircle,
   Clock, XCircle, Search, Save, ClipboardList, Eye, EyeOff
 } from 'lucide-react';
-import { Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest } from '../data/initialData';
-import { db } from '../lib/firebase';
+import { Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest, ContactMessage } from '../data/initialData';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface RequestStatusCardProps {
@@ -371,6 +371,7 @@ interface AdminPanelProps {
   logs: ActivityLog[];
   config: HomePageConfig;
   doctorRequests: DoctorRequest[];
+  contactMessages: ContactMessage[];
   onUpdateDoctors: (docs: Doctor[]) => void;
   onUpdatePharmacies: (pharms: Pharmacy[]) => void;
   onUpdateLabs: (labs: Lab[]) => void;
@@ -379,19 +380,20 @@ interface AdminPanelProps {
   onUpdateConfig: (cfg: HomePageConfig) => void;
   onSaveConfig?: (cfg: HomePageConfig) => Promise<void>;
   onUpdateDoctorRequests: (reqs: DoctorRequest[]) => void;
+  onUpdateContactMessages: (msgs: ContactMessage[]) => void;
   onAddLog: (action: string, type: 'doctor' | 'pharmacy' | 'lab' | 'specialty' | 'ad' | 'system' | 'backup', details: string) => void;
   onShowToast: (msg: string) => void;
 }
 
 export default function AdminPanel({
   adminLoggedIn, onLogin, onLogout,
-  doctors, pharmacies, labs, specialties, ads, logs, config, doctorRequests,
+  doctors, pharmacies, labs, specialties, ads, logs, config, doctorRequests, contactMessages,
   onUpdateDoctors, onUpdatePharmacies, onUpdateLabs, onUpdateSpecialties, onUpdateAds, onUpdateConfig, onSaveConfig,
-  onUpdateDoctorRequests, onAddLog, onShowToast
+  onUpdateDoctorRequests, onUpdateContactMessages, onAddLog, onShowToast
 }: AdminPanelProps) {
   
   const [passcode, setPasscode] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'stats' | 'requests' | 'doctors' | 'pharmacies' | 'labs' | 'specialties' | 'ads' | 'settings' | 'logs'>('stats');
+  const [activeSubTab, setActiveSubTab] = useState<'stats' | 'requests' | 'contact' | 'doctors' | 'pharmacies' | 'labs' | 'specialties' | 'ads' | 'settings' | 'logs'>('stats');
   
   // Entity Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -423,6 +425,11 @@ export default function AdminPanel({
     center: 'الوقف',
     notes: ''
   });
+  
+  // Contact messages management states
+  const [contactSearch, setContactSearch] = useState('');
+  const [contactStatusFilter, setContactStatusFilter] = useState<string>('all');
+  const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   
   // File upload ref for database restoration
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -687,6 +694,60 @@ export default function AdminPanel({
       } catch (error: any) {
         console.error(`Firebase Error deleting request ${id}:`, error);
         alert(`❌ فشل حذف طلب الإضافة من قاعدة البيانات: ${error.message || error}`);
+      }
+    }
+  };
+
+  // --- CRUD ACTIONS FOR CONTACT MESSAGES ---
+  const handleUpdateMessageStatus = async (id: string, newStatus: ContactMessage['status']) => {
+    try {
+      const msgToUpdate = contactMessages.find(m => m.id === id);
+      if (!msgToUpdate) return;
+      
+      const updatedMsg: ContactMessage = {
+        ...msgToUpdate,
+        status: newStatus
+      };
+      
+      await setDoc(doc(db, 'contactMessages', id), updatedMsg);
+      onUpdateContactMessages(contactMessages.map(m => m.id === id ? updatedMsg : m));
+      
+      if (selectedMessage && selectedMessage.id === id) {
+        setSelectedMessage(updatedMsg);
+      }
+      
+      const statusLabels: Record<string, string> = {
+        new: 'جديدة',
+        read: 'تمت القراءة',
+        replied: 'تم الرد',
+        closed: 'مغلقة'
+      };
+      
+      onShowToast(`✔️ تم تحديث حالة الرسالة إلى "${statusLabels[newStatus]}".`);
+      onAddLog('تعديل', 'system', `تم تحديث حالة رسالة التواصل (${id}) إلى: ${statusLabels[newStatus]}`);
+    } catch (err: any) {
+      console.error("Error updating contact message status in Firestore:", err);
+      onShowToast(`❌ فشل في تحديث حالة الرسالة: ${err.message || err}`);
+      handleFirestoreError(err, OperationType.UPDATE, `contactMessages/${id}`);
+    }
+  };
+
+  const handleDeleteMessage = async (id: string, name: string) => {
+    if (window.confirm(`⚠️ هل أنت متأكد من رغبتك في حذف رسالة التواصل من المواطن "${name}" نهائياً؟`)) {
+      try {
+        await deleteDoc(doc(db, 'contactMessages', id));
+        onUpdateContactMessages(contactMessages.filter(m => m.id !== id));
+        
+        if (selectedMessage && selectedMessage.id === id) {
+          setSelectedMessage(null);
+        }
+        
+        onShowToast('🗑️ تم حذف الرسالة بنجاح.');
+        onAddLog('حذف', 'system', `تم حذف رسالة تواصل من المواطن: ${name} (ID: ${id})`);
+      } catch (err: any) {
+        console.error("Error deleting contact message from Firestore:", err);
+        onShowToast(`❌ فشل في حذف الرسالة: ${err.message || err}`);
+        handleFirestoreError(err, OperationType.DELETE, `contactMessages/${id}`);
       }
     }
   };
@@ -1226,7 +1287,8 @@ export default function AdminPanel({
   // Admin Sub-tabs Layout once logged in
   const subTabs = [
     { id: 'stats', label: 'الإحصائيات العامة', icon: Activity },
-    { id: 'requests', label: 'طلبات الأطباء', icon: ClipboardList },
+    { id: 'requests', label: 'طلبات الأطباء', icon: ClipboardList, badge: doctorRequests.filter(r => r.status === 'pending').length },
+    { id: 'contact', label: 'رسائل التواصل', icon: FileText, badge: contactMessages.filter(m => m.status === 'new').length },
     { id: 'doctors', label: 'الأطباء', icon: FileText },
     { id: 'pharmacies', label: 'الصيدليات', icon: FileText },
     { id: 'labs', label: 'المعامل', icon: FileText },
@@ -1246,7 +1308,7 @@ export default function AdminPanel({
           </div>
           <div>
             <h1 className="text-2xl font-black">لوحة التحكم وإدارة البيانات</h1>
-            <p className="text-slate-400 text-xs sm:text-sm font-semibold mt-1">تعديل الأطباء، الصيدليات، المعامل، التخصصات والإعلانات</p>
+            <p className="text-slate-400 text-xs sm:text-sm font-semibold mt-1">تعديل الأطباء، الصيدليات، المعامل، التخصصات والإعلانات ورسائل التواصل</p>
           </div>
         </div>
         <button
@@ -1283,6 +1345,13 @@ export default function AdminPanel({
                   <Icon className="h-4.5 w-4.5" />
                   <span>{tab.label}</span>
                 </div>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                    isActive ? 'bg-white text-emerald-600' : 'bg-rose-500 text-white animate-pulse'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1296,7 +1365,7 @@ export default function AdminPanel({
             <div className="space-y-6 animate-fadeIn">
               <h2 className="text-xl font-bold text-slate-900 border-b pb-2">إحصائيات المنصة الحالية</h2>
               
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                 <div className="bg-white rounded-2xl border border-slate-150 p-4 flex flex-col justify-between shadow-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 text-[11px] font-bold">الأطباء والعيادات</span>
@@ -1327,6 +1396,21 @@ export default function AdminPanel({
                     <span className="text-lg">📩</span>
                   </div>
                   <span className="text-3xl font-extrabold text-amber-600 mt-4 block">{doctorRequests.filter(r => r.status === 'pending').length}</span>
+                </div>
+
+                <div 
+                  onClick={() => setActiveSubTab('contact')}
+                  className="bg-white hover:bg-slate-50 cursor-pointer rounded-2xl border border-slate-150 p-4 flex flex-col justify-between shadow-sm transition-all duration-200"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-[11px] font-bold">رسائل تواصل جديدة</span>
+                    <span className="text-lg">📧</span>
+                  </div>
+                  <span className={`text-3xl font-extrabold mt-4 block ${
+                    contactMessages.filter(m => m.status === 'new').length > 0 ? 'text-rose-600 animate-pulse' : 'text-slate-900'
+                  }`}>
+                    {contactMessages.filter(m => m.status === 'new').length}
+                  </span>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-150 p-4 flex flex-col justify-between shadow-sm">
@@ -1793,6 +1877,373 @@ export default function AdminPanel({
                         handleUpdateRequestStatus={handleUpdateRequestStatus}
                       />
                     ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* === SUB-TAB: CONTACT MESSAGES MANAGEMENT === */}
+          {activeSubTab === 'contact' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">رسائل وتواصل المواطنين</h2>
+                  <p className="text-slate-500 text-xs mt-1 font-semibold">مراجعة رسائل واستفسارات المواطنين الواردة من صفحة اتصل بنا وإدارتها</p>
+                </div>
+                
+                {/* Unread count badge */}
+                <span className="bg-rose-100 text-rose-800 text-xs font-bold px-3.5 py-1.5 rounded-full border border-rose-200 shadow-sm animate-pulse">
+                  {contactMessages.filter(m => m.status === 'new').length} رسائل جديدة قيد الانتظار
+                </span>
+              </div>
+
+              {/* Filters & Search Row */}
+              <div className="bg-white rounded-2xl border border-slate-150 p-4 flex flex-col md:flex-row gap-4 justify-between items-center shadow-sm">
+                <div className="relative w-full md:w-96">
+                  <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="البحث بالاسم، رقم الهاتف، أو موضوع الرسالة..."
+                    value={contactSearch}
+                    onChange={(e) => setContactSearch(e.target.value)}
+                    className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-semibold outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2.5 w-full md:w-auto">
+                  <span className="text-xs font-bold text-slate-500 shrink-0">حالة الرسالة:</span>
+                  <select
+                    value={contactStatusFilter}
+                    onChange={(e) => setContactStatusFilter(e.target.value)}
+                    className="w-full md:w-48 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-xs font-bold text-slate-700 focus:bg-white focus:border-emerald-500 transition-all outline-none"
+                  >
+                    <option value="all">الكل ({contactMessages.length})</option>
+                    <option value="new">جديدة ({contactMessages.filter(m => m.status === 'new').length})</option>
+                    <option value="read">تمت القراءة ({contactMessages.filter(m => m.status === 'read').length})</option>
+                    <option value="replied">تم الرد ({contactMessages.filter(m => m.status === 'replied').length})</option>
+                    <option value="closed">مغلقة ({contactMessages.filter(m => m.status === 'closed').length})</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Messages Grid or Table */}
+              <div className="bg-white border border-slate-150 rounded-2xl overflow-hidden shadow-sm">
+                {(() => {
+                  const filtered = contactMessages.filter(msg => {
+                    const currentName = msg.fullName || (msg as any).name || '';
+                    if (contactStatusFilter !== 'all' && msg.status !== contactStatusFilter) return false;
+                    if (contactSearch.trim()) {
+                      const q = contactSearch.toLowerCase().trim();
+                      return (
+                        currentName.toLowerCase().includes(q) ||
+                        msg.phone?.toLowerCase().includes(q) ||
+                        msg.subject?.toLowerCase().includes(q) ||
+                        msg.message?.toLowerCase().includes(q)
+                      );
+                    }
+                    return true;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="py-16 text-center space-y-3">
+                        <span className="text-4xl block">📧</span>
+                        <h3 className="text-base font-bold text-slate-700">لا توجد رسائل تواصل مطابقة للبحث</h3>
+                        <p className="text-slate-400 text-xs font-semibold max-w-sm mx-auto">تأكد من كتابة مصطلح بحث صحيح أو تغيير فلتر الحالة لرؤية الرسائل الأخرى.</p>
+                        {contactSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setContactSearch('')}
+                            className="text-xs font-bold text-emerald-600 hover:underline"
+                          >
+                            تنظيف حقل البحث
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-right border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-extrabold text-xs">
+                            <th className="p-4">اسم المواطن</th>
+                            <th className="p-4">رقم الهاتف</th>
+                            <th className="p-4">موضوع الاستفسار</th>
+                            <th className="p-4">تاريخ ووقت الإرسال</th>
+                            <th className="p-4">الحالة</th>
+                            <th className="p-4 text-center">الإجراءات</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                          {filtered.map((msg) => {
+                            const currentId = msg.messageId || msg.id || '';
+                            const currentName = msg.fullName || (msg as any).name || '';
+                            return (
+                              <tr key={currentId} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="p-4">
+                                  <span className="font-bold text-slate-950 block">{currentName}</span>
+                                  {msg.email && <span className="text-[10px] text-slate-400 font-normal">{msg.email}</span>}
+                                </td>
+                                <td className="p-4">
+                                  <span className="font-mono text-slate-600 block text-right" dir="ltr">{msg.phone}</span>
+                                </td>
+                                <td className="p-4">
+                                  <span className="line-clamp-1 max-w-[200px] text-slate-800">{msg.subject || 'بدون موضوع'}</span>
+                                </td>
+                                <td className="p-4 text-slate-500">
+                                  {msg.createdAt ? new Date(msg.createdAt).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : 'غير محدد'}
+                                </td>
+                                <td className="p-4">
+                                  {(() => {
+                                    switch (msg.status) {
+                                      case 'new':
+                                        return (
+                                          <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 text-[10px] px-2 py-1 rounded-full border border-rose-100 shadow-sm animate-pulse">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
+                                            جديدة
+                                          </span>
+                                        );
+                                      case 'read':
+                                        return (
+                                          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded-full border border-blue-100 shadow-sm">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                                            تمت القراءة
+                                          </span>
+                                        );
+                                      case 'replied':
+                                        return (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[10px] px-2 py-1 rounded-full border border-emerald-100 shadow-sm">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                            تم الرد
+                                          </span>
+                                        );
+                                      case 'closed':
+                                        return (
+                                          <span className="inline-flex items-center gap-1 bg-slate-50 text-slate-600 text-[10px] px-2 py-1 rounded-full border border-slate-200 shadow-sm">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                            مغلقة
+                                          </span>
+                                        );
+                                      default:
+                                        return null;
+                                    }
+                                  })()}
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        setSelectedMessage(msg);
+                                        if (msg.status === 'new') {
+                                          await handleUpdateMessageStatus(currentId, 'read');
+                                        }
+                                      }}
+                                      className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-100 transition-all shadow-sm"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                      <span>عرض التفاصيل</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMessage(currentId, currentName)}
+                                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all border border-transparent hover:border-rose-100 shadow-sm"
+                                      title="حذف الرسالة"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Message Details Overlay */}
+              {selectedMessage && (() => {
+                const selectedId = selectedMessage.messageId || selectedMessage.id || '';
+                const selectedName = selectedMessage.fullName || (selectedMessage as any).name || '';
+                return (
+                  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn" onClick={() => setSelectedMessage(null)}>
+                    <div 
+                      className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh] animate-scaleIn"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* Modal Header */}
+                      <div className="bg-slate-900 text-white p-6 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
+                            <FileText className="h-5 w-5 text-emerald-400" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-lg text-white">تفاصيل رسالة التواصل</h3>
+                            <p className="text-slate-400 text-xs font-semibold mt-0.5">الرقم المرجعي للرسالة: {selectedId}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMessage(null)}
+                          className="p-2 hover:bg-white/10 rounded-xl transition-colors text-slate-300 hover:text-white"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Modal Content */}
+                      <div className="p-6 overflow-y-auto space-y-6 text-right" dir="rtl">
+                        {/* Grid Citizen Data */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                            <span className="text-[10px] font-extrabold text-slate-400 block mb-1">اسم المواطن</span>
+                            <span className="text-sm font-bold text-slate-900 block">{selectedName}</span>
+                          </div>
+
+                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex justify-between items-center">
+                            <div>
+                              <span className="text-[10px] font-extrabold text-slate-400 block mb-1">رقم الهاتف</span>
+                              <span className="text-sm font-mono font-extrabold text-slate-900 block" dir="ltr">{selectedMessage.phone}</span>
+                            </div>
+                            <div className="flex gap-1">
+                              <a
+                                href={`tel:${selectedMessage.phone}`}
+                                className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200"
+                                title="اتصال مباشر"
+                              >
+                                📞
+                              </a>
+                              <a
+                                href={`https://wa.me/2${selectedMessage.phone}`}
+                                target="_blank"
+                                referrerPolicy="no-referrer"
+                                className="p-1.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg transition-colors"
+                                title="تواصل واتساب"
+                              >
+                                💬
+                              </a>
+                            </div>
+                          </div>
+
+                          {selectedMessage.email && (
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex justify-between items-center">
+                              <div>
+                                <span className="text-[10px] font-extrabold text-slate-400 block mb-1">البريد الإلكتروني</span>
+                                <span className="text-sm font-bold text-slate-900 block break-all">{selectedMessage.email}</span>
+                              </div>
+                              <a
+                                href={`mailto:${selectedMessage.email}`}
+                                className="p-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
+                                title="إرسال بريد إلكتروني"
+                              >
+                                ✉️
+                              </a>
+                            </div>
+                          )}
+
+                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                            <span className="text-[10px] font-extrabold text-slate-400 block mb-1">تاريخ ووقت الإرسال</span>
+                            <span className="text-sm font-bold text-slate-900 block">
+                              {selectedMessage.createdAt ? new Date(selectedMessage.createdAt).toLocaleString('ar-EG') : 'غير محدد'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Subject */}
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                          <span className="text-[10px] font-extrabold text-slate-400 block mb-1">موضوع الاستفسار</span>
+                          <h4 className="text-sm font-bold text-slate-950">{selectedMessage.subject || 'بدون موضوع'}</h4>
+                        </div>
+
+                        {/* Message Content */}
+                        <div className="bg-emerald-50/20 border border-emerald-100/45 rounded-2xl p-5 space-y-2">
+                          <span className="text-[10px] font-extrabold text-emerald-700 block">تفاصيل الرسالة أو الاستفسار:</span>
+                          <p className="text-sm text-slate-800 leading-relaxed font-semibold whitespace-pre-line break-words text-justify">
+                            {selectedMessage.message}
+                          </p>
+                        </div>
+
+                        {/* Action Status Selection */}
+                        <div className="border-t pt-4 space-y-3">
+                          <span className="text-xs font-bold text-slate-500 block">تحديث حالة رسالة التواصل:</span>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateMessageStatus(selectedId, 'new')}
+                              className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                                selectedMessage.status === 'new'
+                                  ? 'bg-rose-50 text-rose-700 border-rose-300 shadow-sm'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              جديدة
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateMessageStatus(selectedId, 'read')}
+                              className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                                selectedMessage.status === 'read'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-300 shadow-sm'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              تمت القراءة
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateMessageStatus(selectedId, 'replied')}
+                              className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                                selectedMessage.status === 'replied'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-sm'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              تم الرد
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateMessageStatus(selectedId, 'closed')}
+                              className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                                selectedMessage.status === 'closed'
+                                  ? 'bg-slate-100 text-slate-700 border-slate-300 shadow-sm'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              مغلقة
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="bg-slate-50 px-6 py-4 flex justify-between items-center border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleDeleteMessage(selectedId, selectedName);
+                          }}
+                          className="bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 py-2 px-4 rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>حذف هذه الرسالة</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMessage(null)}
+                          className="bg-slate-900 hover:bg-slate-800 text-white py-2 px-6 rounded-xl text-xs font-bold transition-colors shadow-sm"
+                        >
+                          إغلاق النافذة
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}

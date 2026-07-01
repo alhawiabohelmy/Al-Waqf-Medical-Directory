@@ -9,7 +9,7 @@ import {
 
 // Firebase Firestore
 import { collection, doc, setDoc, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 // Components
 import Navbar from './components/Navbar';
@@ -19,7 +19,7 @@ import AdminPanel from './components/AdminPanel';
 
 // Data / Types
 import { 
-  Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest,
+  Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest, ContactMessage,
   INITIAL_DOCTORS, INITIAL_PHARMACIES, INITIAL_LABS, INITIAL_SPECIALTIES, 
   INITIAL_ADS, INITIAL_LOGS, INITIAL_HOME_CONFIG 
 } from './data/initialData';
@@ -153,6 +153,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>(() => {
+    const saved = localStorage.getItem('waqf_contact_messages');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Helper to sync any generic collection list to Firestore
   const syncCollectionToFirestore = async <T extends { id: string }>(
     collectionName: string,
@@ -245,6 +250,13 @@ export default function App() {
     });
   };
 
+  const handleUpdateContactMessages = (value: ContactMessage[] | ((prev: ContactMessage[]) => ContactMessage[])) => {
+    setContactMessages((prev) => {
+      const resolved = typeof value === 'function' ? value(prev) : value;
+      return resolved;
+    });
+  };
+
   // Fetch all collections on mount
   useEffect(() => {
     const fetchAllData = async () => {
@@ -310,9 +322,36 @@ export default function App() {
         reqList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setDoctorRequests(reqList);
 
+        // 8. Fetch contactMessages
+        try {
+          const contactSnap = await getDocs(collection(db, 'contactMessages'));
+          const contactList: ContactMessage[] = [];
+          contactSnap.forEach((c) => {
+            const data = c.data();
+            contactList.push({
+              id: c.id,
+              messageId: data.messageId || c.id,
+              fullName: data.fullName || data.name || '',
+              phone: data.phone || '',
+              email: data.email || '',
+              subject: data.subject || '',
+              message: data.message || '',
+              status: data.status || 'new',
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: data.updatedAt || data.createdAt || new Date().toISOString()
+            } as ContactMessage);
+          });
+          contactList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setContactMessages(contactList);
+        } catch (err) {
+          console.error("Error fetching contactMessages:", err);
+          handleFirestoreError(err, OperationType.GET, 'contactMessages');
+        }
+
         console.log("All directory states synchronized successfully with Firestore.");
       } catch (error) {
         console.error("Error fetching all collections on mount:", error);
+        handleFirestoreError(error, OperationType.GET, 'multiple_collections');
       }
     };
     fetchAllData();
@@ -379,7 +418,7 @@ export default function App() {
   const [globalSearchCategory, setGlobalSearchCategory] = useState<'all' | 'doctors' | 'pharmacies' | 'labs'>('all');
 
   // Contact form submission simulator
-  const [contactForm, setContactForm] = useState({ name: '', phone: '', email: '', message: '' });
+  const [contactForm, setContactForm] = useState({ name: '', phone: '', email: '', subject: '', message: '' });
   const [contactSubmitted, setContactSubmitted] = useState(false);
 
   // Service Submission & Tracking Form States
@@ -438,6 +477,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('waqf_doctor_requests', JSON.stringify(doctorRequests));
   }, [doctorRequests]);
+
+  useEffect(() => {
+    localStorage.setItem('waqf_contact_messages', JSON.stringify(contactMessages));
+  }, [contactMessages]);
 
   // --- ADMINISTRATIVE UTILITIES ---
   const addLog = (action: string, type: ActivityLog['type'], details: string) => {
@@ -639,19 +682,56 @@ export default function App() {
     }
   };
 
-  // Simulated Inquiry submission
-  const handleContactSubmit = (e: React.FormEvent) => {
+  // Firestore Inquiry submission
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!contactForm.name || !contactForm.message || !contactForm.phone) {
+    if (!contactForm.name || !contactForm.message || !contactForm.phone || !contactForm.subject) {
       showToast('⚠️ يرجى تعبئة الحقول الإلزامية في نموذج الاتصال.');
       return;
     }
     
-    // Add activity log to admin logs
-    addLog('إضافة', 'system', `تم استلام رسالة تواصل جديدة من المواطن: ${contactForm.name} - هاتف: ${contactForm.phone}`);
-    setContactSubmitted(true);
-    showToast('📨 تم إرسال رسالتك بنجاح! ستتواصل معك إدارة الموقع قريباً.');
-    setContactForm({ name: '', phone: '', email: '', message: '' });
+    setIsSubmittingRequest(true);
+    try {
+      const newMsgId = `msg-${Date.now()}`;
+      const cleanMessage: ContactMessage = {
+        id: newMsgId,
+        messageId: newMsgId,
+        fullName: contactForm.name,
+        phone: contactForm.phone,
+        email: contactForm.email || '',
+        subject: contactForm.subject,
+        message: contactForm.message,
+        status: 'new',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // 1. Persist directly to Cloud Firestore first
+      await setDoc(doc(db, 'contactMessages', newMsgId), {
+        messageId: cleanMessage.messageId,
+        fullName: cleanMessage.fullName,
+        phone: cleanMessage.phone,
+        email: cleanMessage.email,
+        subject: cleanMessage.subject,
+        message: cleanMessage.message,
+        status: cleanMessage.status,
+        createdAt: cleanMessage.createdAt,
+        updatedAt: cleanMessage.updatedAt
+      });
+      
+      // 2. Only show success and update UI if save succeeded
+      setContactMessages(prev => [cleanMessage, ...prev]);
+      addLog('إضافة', 'system', `تم استلام رسالة تواصل جديدة من المواطن: ${contactForm.name} - موضوع: ${contactForm.subject}`);
+      setContactSubmitted(true);
+      showToast('📨 تم إرسال رسالتك بنجاح! ستتواصل معك إدارة الموقع قريباً.');
+      setContactForm({ name: '', phone: '', email: '', subject: '', message: '' });
+    } catch (error) {
+      console.error("Error submitting contact message to Firestore:", error);
+      showToast('❌ حدث خطأ أثناء إرسال الرسالة، يرجى المحاولة مرة أخرى.');
+      handleFirestoreError(error, OperationType.WRITE, 'contactMessages');
+    } finally {
+      setIsSubmittingRequest(false);
+    }
   };
 
   // Navigation search jumper
@@ -1446,13 +1526,25 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1" htmlFor="contact-msg">موضوع الرسالة والاستفسار بالتفصيل *</label>
+                      <label className="block text-xs font-bold text-slate-600 mb-1" htmlFor="contact-subject">موضوع الرسالة والاستفسار *</label>
+                      <input 
+                        id="contact-subject"
+                        type="text" required
+                        value={contactForm.subject}
+                        onChange={e => setContactForm({...contactForm, subject: e.target.value})}
+                        placeholder="مثال: طلب إضافة عيادة، استفسار إعلاني، شكوى أو مقترح..."
+                        className="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1" htmlFor="contact-msg">تفاصيل الاستفسار أو الرسالة *</label>
                       <textarea 
                         id="contact-msg"
                         required rows={4}
                         value={contactForm.message}
                         onChange={e => setContactForm({...contactForm, message: e.target.value})}
-                        placeholder="اكتب هنا تفاصيل العيادة المطلوب إضافتها أو استفسارك بخصوص المساحات الإعلانية المتاحة..."
+                        placeholder="اكتب هنا تفاصيل الاستفسار أو الرسالة بوضوح وسنقوم بالتواصل والرد عليكم..."
                         className="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       />
                     </div>
@@ -2214,6 +2306,7 @@ export default function App() {
             logs={logs}
             config={config}
             doctorRequests={doctorRequests}
+            contactMessages={contactMessages}
             onUpdateDoctors={handleUpdateDoctors}
             onUpdatePharmacies={handleUpdatePharmacies}
             onUpdateLabs={handleUpdateLabs}
@@ -2222,6 +2315,7 @@ export default function App() {
             onUpdateConfig={handleUpdateConfig}
             onSaveConfig={handleSaveConfig}
             onUpdateDoctorRequests={handleUpdateDoctorRequests}
+            onUpdateContactMessages={handleUpdateContactMessages}
             onAddLog={addLog}
             onShowToast={showToast}
           />
