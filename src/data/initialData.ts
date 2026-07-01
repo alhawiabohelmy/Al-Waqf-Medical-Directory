@@ -99,6 +99,14 @@ export interface DoctorRequest {
   serviceType: 'doctor' | 'pharmacy' | 'lab' | 'scan_center' | 'hospital' | 'physiotherapy' | 'other';
   name: string; // Represents Doctor's name, Pharmacy's name, Lab's name, Center's name, Hospital's name, or Service's name
   
+  // Specific name aliases requested for cleaner Firestore documents
+  doctorName?: string;
+  pharmacyName?: string;
+  labName?: string;
+  hospitalName?: string;
+  radiologyCenterName?: string;
+  physiotherapyCenterName?: string;
+
   // Specialty fields
   specialty?: string; // used for doctor
   clinicName?: string; // used for doctor (optional)

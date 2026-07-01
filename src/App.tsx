@@ -385,8 +385,21 @@ export default function App() {
   // Service request submission handler (generalized)
   const handleDoctorRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!requestDocForm.name || !requestDocForm.phone || !requestDocForm.address) {
-      showToast('⚠️ يرجى تعبئة الحقول الأساسية المطلوبة.');
+    
+    const rawName = requestDocForm.name.trim();
+    const rawAddress = requestDocForm.address.trim();
+    const rawPhone = requestDocForm.phone.trim();
+
+    if (!rawName) {
+      showToast('⚠️ يرجى إدخال الاسم.');
+      return;
+    }
+    if (!rawAddress) {
+      showToast('⚠️ يرجى إدخال العنوان.');
+      return;
+    }
+    if (!rawPhone) {
+      showToast('⚠️ يرجى إدخال رقم الهاتف.');
       return;
     }
 
@@ -406,37 +419,77 @@ export default function App() {
 
     // Determine specialty for doctor or default
     const finalSpecialty = requestDocForm.serviceType === 'doctor'
-      ? (requestDocForm.specialty === 'other' ? (requestDocForm.customSpecialty || 'تخصص عام') : (requestDocForm.specialty || specialties[0] || 'أطفال وحديثي الولادة'))
+      ? (requestDocForm.specialty === 'other' ? (requestDocForm.customSpecialty?.trim() || 'تخصص عام') : (requestDocForm.specialty || specialties[0] || 'أطفال وحديثي الولادة'))
       : undefined;
 
     // Generate Request ID: e.g., SRQ-49204
     const newReqId = `SRQ-${Math.floor(10000 + Math.random() * 90000)}`;
 
-    const newRequest: DoctorRequest = {
+    // Build request data dynamically based on the serviceType only
+    const baseRequest: any = {
       id: newReqId,
       serviceType: requestDocForm.serviceType,
-      name: requestDocForm.name,
-      specialty: finalSpecialty,
-      clinicName: requestDocForm.serviceType === 'doctor' ? (requestDocForm.clinicName || 'عيادة خاصة') : undefined,
-      pharmacistName: requestDocForm.serviceType === 'pharmacy' ? requestDocForm.pharmacistName : undefined,
-      shortDescription: requestDocForm.serviceType === 'other' ? requestDocForm.shortDescription : undefined,
-      address: requestDocForm.address,
-      phone: requestDocForm.phone,
-      governorate: requestDocForm.governorate,
-      center: requestDocForm.center,
-      notes: requestDocForm.notes,
+      address: rawAddress,
+      phone: rawPhone,
+      governorate: requestDocForm.governorate || 'قنا',
+      center: requestDocForm.center || 'الوقف',
       createdAt: new Date().toISOString(),
       status: 'pending'
     };
 
+    if (requestDocForm.notes && requestDocForm.notes.trim()) {
+      baseRequest.notes = requestDocForm.notes.trim();
+    }
+
+    if (requestDocForm.serviceType === 'doctor') {
+      baseRequest.name = rawName;
+      baseRequest.doctorName = rawName;
+      baseRequest.specialty = finalSpecialty;
+      baseRequest.clinicName = requestDocForm.clinicName?.trim() || 'عيادة خاصة';
+    } else if (requestDocForm.serviceType === 'pharmacy') {
+      baseRequest.name = rawName;
+      baseRequest.pharmacyName = rawName;
+      if (requestDocForm.pharmacistName && requestDocForm.pharmacistName.trim()) {
+        baseRequest.pharmacistName = requestDocForm.pharmacistName.trim();
+      }
+    } else if (requestDocForm.serviceType === 'lab') {
+      baseRequest.name = rawName;
+      baseRequest.labName = rawName;
+    } else if (requestDocForm.serviceType === 'scan_center') {
+      baseRequest.name = rawName;
+      baseRequest.radiologyCenterName = rawName;
+    } else if (requestDocForm.serviceType === 'hospital') {
+      baseRequest.name = rawName;
+      baseRequest.hospitalName = rawName;
+    } else if (requestDocForm.serviceType === 'physiotherapy') {
+      baseRequest.name = rawName;
+      baseRequest.physiotherapyCenterName = rawName;
+    } else {
+      // other
+      baseRequest.name = rawName;
+      if (requestDocForm.shortDescription && requestDocForm.shortDescription.trim()) {
+        baseRequest.shortDescription = requestDocForm.shortDescription.trim();
+      }
+    }
+
+    // Clean data thoroughly to completely eliminate undefined or empty fields
+    const cleanRequest: any = {};
+    for (const key of Object.keys(baseRequest)) {
+      const val = baseRequest[key];
+      if (val !== undefined && val !== null && val !== '') {
+        cleanRequest[key] = val;
+      }
+    }
+
     try {
-      console.log("Saving request to Firestore requests collection...", newRequest);
+      console.log("Saving thoroughly cleaned request to Firestore requests collection...", cleanRequest);
       // Save directly to Firestore collection "requests" with document ID as newReqId
-      await setDoc(doc(db, 'requests', newReqId), newRequest);
+      await setDoc(doc(db, 'requests', newReqId), cleanRequest);
       console.log("Request successfully saved to Firestore!");
 
-      setDoctorRequests(prev => [newRequest, ...prev]);
-      addLog('إضافة', 'system', `تم تقديم طلب إضافة ${typeLabel}: ${newRequest.name} برقم طلب: ${newReqId}`);
+      // Update control panel state to immediately show the new request
+      setDoctorRequests(prev => [cleanRequest as DoctorRequest, ...prev]);
+      addLog('إضافة', 'system', `تم تقديم طلب إضافة ${typeLabel}: ${cleanRequest.name} برقم طلب: ${newReqId}`);
       
       setSubmittedRequestId(newReqId);
       showToast(`🎉 تم إرسال طلب إضافة ${typeLabel} بنجاح! احتفظ برقم الطلب.`);
