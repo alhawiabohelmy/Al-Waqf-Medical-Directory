@@ -8,6 +8,23 @@ export interface Doctor {
   whatsapp?: string;
   createdAt: string;
   hidden?: boolean;
+  isPinned?: boolean;
+  displayOrder?: number;
+  isFeatured?: boolean;
+  isPaidAd?: boolean;
+  expiryDate?: string;
+  isVerified?: boolean;
+  pinDuration?: '7' | '30' | '90' | 'permanent';
+  pinExpiryDate?: string;
+  servicesProvided?: string[];
+  startDay?: string;
+  endDay?: string;
+  openHour?: string;
+  closeHour?: string;
+  daysOff?: string[];
+  packageTier?: 'normal' | 'silver' | 'gold' | 'diamond';
+  lastUpdated?: string;
+  village?: string;
 }
 
 export interface Pharmacy {
@@ -18,6 +35,23 @@ export interface Pharmacy {
   whatsapp?: string;
   createdAt: string;
   hidden?: boolean;
+  isPinned?: boolean;
+  displayOrder?: number;
+  isFeatured?: boolean;
+  isPaidAd?: boolean;
+  expiryDate?: string;
+  isVerified?: boolean;
+  pinDuration?: '7' | '30' | '90' | 'permanent';
+  pinExpiryDate?: string;
+  servicesProvided?: string[];
+  startDay?: string;
+  endDay?: string;
+  openHour?: string;
+  closeHour?: string;
+  daysOff?: string[];
+  packageTier?: 'normal' | 'silver' | 'gold' | 'diamond';
+  lastUpdated?: string;
+  village?: string;
 }
 
 export interface Lab {
@@ -28,6 +62,23 @@ export interface Lab {
   whatsapp?: string;
   createdAt: string;
   hidden?: boolean;
+  isPinned?: boolean;
+  displayOrder?: number;
+  isFeatured?: boolean;
+  isPaidAd?: boolean;
+  expiryDate?: string;
+  isVerified?: boolean;
+  pinDuration?: '7' | '30' | '90' | 'permanent';
+  pinExpiryDate?: string;
+  servicesProvided?: string[];
+  startDay?: string;
+  endDay?: string;
+  openHour?: string;
+  closeHour?: string;
+  daysOff?: string[];
+  packageTier?: 'normal' | 'silver' | 'gold' | 'diamond';
+  lastUpdated?: string;
+  village?: string;
 }
 
 export interface Ad {
@@ -89,6 +140,10 @@ export interface HomePageConfig {
   // Sections Control (Visibility & Order)
   sectionsOrder?: string[]; // e.g. ['ticker', 'top-ad', 'hero', 'search', 'services', 'middle-ad', 'stats', 'featured']
   disabledSections?: string[]; // list of sections that are disabled
+  
+  // Paid Ads Carousel / Static Control
+  paidAdsDisplayType?: 'static' | 'carousel';
+  paidAdsSpeed?: number; // in seconds
   
   // Password Configuration
   adminPassword?: string;
@@ -225,6 +280,8 @@ export const INITIAL_HOME_CONFIG: HomePageConfig = {
   
   sectionsOrder: ['top-ad', 'hero', 'search', 'services', 'middle-ad', 'stats', 'featured'],
   disabledSections: [],
+  paidAdsDisplayType: 'carousel',
+  paidAdsSpeed: 4,
   
   adminPassword: '@Alhawi92682905'
 };

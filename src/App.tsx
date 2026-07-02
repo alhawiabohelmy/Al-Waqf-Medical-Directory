@@ -4,7 +4,7 @@ import {
   Search, Stethoscope, Pill, FlaskConical, ArrowUpRight, CheckCircle2, 
   HelpCircle, Send, HeartPulse, ShieldAlert, ChevronLeft, Volume2, Info, MessageSquare,
   ClipboardList, UserPlus, PlusCircle, Check, Clock, AlertCircle, XCircle, ArrowLeft, X,
-  ShieldCheck, FileText, PhoneCall, FileSearch, AlertTriangle, Archive, Save
+  ShieldCheck, FileText, PhoneCall, FileSearch, AlertTriangle, Archive, Save, SlidersHorizontal
 } from 'lucide-react';
 
 // Firebase Firestore
@@ -16,6 +16,7 @@ import Navbar from './components/Navbar';
 import Ticker from './components/Ticker';
 import ListingCard from './components/ListingCard';
 import AdminPanel from './components/AdminPanel';
+import { checkActivityStatus } from './lib/activityStatus';
 
 // Data / Types
 import { 
@@ -110,6 +111,68 @@ const getThemeColorClasses = (color: HomePageConfig['themeColor'] = 'emerald'): 
   };
   return mapping[color || 'emerald'] || mapping.emerald;
 };
+
+export function sortListings<T extends { 
+  isPinned?: boolean; 
+  pinExpiryDate?: string; 
+  isFeatured?: boolean; 
+  packageTier?: string; 
+  lastUpdated?: string; 
+  createdAt?: string; 
+  name: string; 
+}>(list: T[], nameSort?: string): T[] {
+  // If the user explicitly chose name sorting, respect it!
+  if (nameSort === 'name-asc') {
+    return [...list].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  }
+  if (nameSort === 'name-desc') {
+    return [...list].sort((a, b) => b.name.localeCompare(a.name, 'ar'));
+  }
+
+  // Otherwise, apply Waqf Smart Ranking Priority!
+  return [...list].sort((a, b) => {
+    // 1. Pinned Check
+    const now = new Date();
+    const isAPinned = !!a.isPinned && (!a.pinExpiryDate || new Date(a.pinExpiryDate) > now);
+    const isBPinned = !!b.isPinned && (!b.pinExpiryDate || new Date(b.pinExpiryDate) > now);
+
+    if (isAPinned && !isBPinned) return -1;
+    if (!isAPinned && isBPinned) return 1;
+    if (isAPinned && isBPinned) {
+      // Both are pinned, sort by lastUpdated or createdAt descending
+      const dateA = a.lastUpdated || a.createdAt || '';
+      const dateB = b.lastUpdated || b.createdAt || '';
+      return dateB.localeCompare(dateA);
+    }
+
+    // 2. Featured Check
+    const isAFeatured = !!a.isFeatured;
+    const isBFeatured = !!b.isFeatured;
+
+    if (isAFeatured && !isBFeatured) return -1;
+    if (!isAFeatured && isBFeatured) return 1;
+
+    // 3. Package Tier Check (Diamond > Gold > Silver > Normal)
+    const TIER_PRIORITY: Record<string, number> = {
+      'diamond': 4,
+      'gold': 3,
+      'silver': 2,
+      'normal': 1
+    };
+
+    const tierA = TIER_PRIORITY[a.packageTier || 'normal'] || 1;
+    const tierB = TIER_PRIORITY[b.packageTier || 'normal'] || 1;
+
+    if (tierA !== tierB) {
+      return tierB - tierA; // Higher score comes first
+    }
+
+    // 4. Fallback to Last Updated / Created At Descending
+    const dateA = a.lastUpdated || a.createdAt || '';
+    const dateB = b.lastUpdated || b.createdAt || '';
+    return dateB.localeCompare(dateA);
+  });
+}
 
 export default function App() {
   // --- CORE SYSTEM STATES ---
@@ -412,6 +475,13 @@ export default function App() {
   const [doctorSort, setDoctorSort] = useState('recent'); // 'recent' | 'name-asc' | 'name-desc'
   const [pharmSort, setPharmSort] = useState('recent'); // 'recent' | 'name-asc' | 'name-desc'
   const [labSort, setLabSort] = useState('recent'); // 'recent' | 'name-asc' | 'name-desc'
+
+  // Advanced Search & Filter states
+  const [villageFilter, setVillageFilter] = useState('');
+  const [availableNowFilter, setAvailableNowFilter] = useState(false);
+  const [distinctionFilter, setDistinctionFilter] = useState('all'); // 'all' | 'featured' | 'verified'
+  const [servicesSearch, setServicesSearch] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Unified Search state
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
@@ -1103,12 +1173,111 @@ export default function App() {
                   onChange={(e) => setDoctorSort(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200"
                 >
+                  <option value="smart">الترتيب الذكي (الافتراضي)</option>
                   <option value="recent">الأحدث تسجيلاً</option>
                   <option value="name-asc">الاسم (أ إلى ي)</option>
                   <option value="name-desc">الاسم (ي إلى أ)</option>
                 </select>
               </div>
+
+              {/* Toggle Advanced Filters Button */}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 justify-center px-4 py-3.5 text-sm font-bold rounded-xl border transition-all duration-200 shrink-0 ${
+                  showAdvancedFilters || villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-100'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                <span>خيارات بحث متقدم</span>
+                {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                  <span className="bg-blue-600 text-white rounded-full w-2 h-2" />
+                )}
+              </button>
+
+              {/* Clear Filters Button */}
+              {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                <button 
+                  onClick={() => {
+                    setVillageFilter('');
+                    setAvailableNowFilter(false);
+                    setDistinctionFilter('all');
+                    setServicesSearch('');
+                  }}
+                  className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 py-2 px-3 rounded-xl transition-colors flex items-center gap-1.5 justify-center"
+                >
+                  <Clock className="h-3.5 w-3.5 rotate-180" />
+                  <span>إعادة تعيين</span>
+                </button>
+              )}
             </div>
+
+            {/* Advanced Filters Panel */}
+            {showAdvancedFilters && (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-8 animate-fadeIn grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {/* 1. Village/Area Select */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">تصفية حسب القرية / المنطقة</label>
+                  <select
+                    value={villageFilter}
+                    onChange={(e) => setVillageFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">جميع قرى الوقف</option>
+                    {['مدينة الوقف', 'المراشدة', 'القلمينا', 'دمو', 'العبل', 'بني كود', 'السنابسة'].map((v, i) => (
+                      <option key={i} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Distinction Type */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">نوع التميز والتوثيق</label>
+                  <select
+                    value={distinctionFilter}
+                    onChange={(e) => setDistinctionFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="all">الجميع (افتراضي)</option>
+                    <option value="featured">المتميزين فقط ⭐</option>
+                    <option value="verified">الموثقين فقط ✅</option>
+                  </select>
+                </div>
+
+                {/* 3. Services search */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">البحث بالخدمات الطبية</label>
+                  <input
+                    type="text"
+                    value={servicesSearch}
+                    onChange={(e) => setServicesSearch(e.target.value)}
+                    placeholder="سونار، كشف باطني، رسم قلب..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* 4. Available Now toggle */}
+                <div className="flex flex-col justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setAvailableNowFilter(!availableNowFilter)}
+                    className={`w-full flex items-center justify-between border rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      availableNowFilter
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 ring-2 ring-emerald-100'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2.5 h-2.5 rounded-full ${availableNowFilter ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                      <span>المتاحون الآن فقط</span>
+                    </div>
+                    {availableNowFilter && <Check className="h-4 w-4 text-emerald-600" />}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Grid listing */}
             {(() => {
@@ -1122,19 +1291,40 @@ export default function App() {
                   doc.specialty.toLowerCase().includes(query);
                 
                 const matchSpecialty = !selectedSpecialty || doc.specialty === selectedSpecialty;
+
+                // 1. Village match
+                const matchVillage = !villageFilter || 
+                  (doc.village && doc.village.includes(villageFilter)) ||
+                  (doc.address && doc.address.includes(villageFilter));
                 
-                return matchQuery && matchSpecialty;
+                // 2. Available now
+                let matchAvailable = true;
+                if (availableNowFilter) {
+                  const status = checkActivityStatus(doc);
+                  matchAvailable = status.isOpen;
+                }
+
+                // 3. Distinction
+                let matchDistinction = true;
+                if (distinctionFilter === 'featured') {
+                  matchDistinction = !!doc.isFeatured;
+                } else if (distinctionFilter === 'verified') {
+                  matchDistinction = !!doc.isVerified;
+                }
+
+                // 4. Services Search
+                let matchServices = true;
+                if (servicesSearch.trim()) {
+                  const sQuery = servicesSearch.toLowerCase().trim();
+                  matchServices = doc.servicesProvided ? 
+                    doc.servicesProvided.some(s => s.toLowerCase().includes(sQuery)) : false;
+                }
+                
+                return matchQuery && matchSpecialty && matchVillage && matchAvailable && matchDistinction && matchServices;
               });
 
               // Apply sorting
-              if (doctorSort === 'name-asc') {
-                filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-              } else if (doctorSort === 'name-desc') {
-                filtered = [...filtered].sort((a, b) => b.name.localeCompare(a.name, 'ar'));
-              } else {
-                // 'recent': sort by id or virtual timestamp
-                filtered = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-              }
+              filtered = sortListings(filtered, doctorSort);
 
               if (filtered.length === 0) {
                 return (
@@ -1209,27 +1399,150 @@ export default function App() {
                   onChange={(e) => setPharmSort(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 transition-all duration-200"
                 >
+                  <option value="smart">الترتيب الذكي (الافتراضي)</option>
                   <option value="recent">الأحدث تسجيلاً</option>
                   <option value="name-asc">الاسم (أ إلى ي)</option>
                   <option value="name-desc">الاسم (ي إلى أ)</option>
                 </select>
               </div>
+
+              {/* Toggle Advanced Filters Button */}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 justify-center px-4 py-3.5 text-sm font-bold rounded-xl border transition-all duration-200 shrink-0 ${
+                  showAdvancedFilters || villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 ring-2 ring-amber-100'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                <span>خيارات بحث متقدم</span>
+                {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                  <span className="bg-amber-600 text-white rounded-full w-2 h-2" />
+                )}
+              </button>
+
+              {/* Clear Filters Button */}
+              {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                <button 
+                  onClick={() => {
+                    setVillageFilter('');
+                    setAvailableNowFilter(false);
+                    setDistinctionFilter('all');
+                    setServicesSearch('');
+                  }}
+                  className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 py-2 px-3 rounded-xl transition-colors flex items-center gap-1.5 justify-center"
+                >
+                  <Clock className="h-3.5 w-3.5 rotate-180" />
+                  <span>إعادة تعيين</span>
+                </button>
+              )}
             </div>
+
+            {/* Advanced Filters Panel */}
+            {showAdvancedFilters && (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-8 animate-fadeIn grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {/* 1. Village/Area Select */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">تصفية حسب القرية / المنطقة</label>
+                  <select
+                    value={villageFilter}
+                    onChange={(e) => setVillageFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">جميع قرى الوقف</option>
+                    {['مدينة الوقف', 'المراشدة', 'القلمينا', 'دمو', 'العبل', 'بني كود', 'السنابسة'].map((v, i) => (
+                      <option key={i} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Distinction Type */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">نوع التميز والتوثيق</label>
+                  <select
+                    value={distinctionFilter}
+                    onChange={(e) => setDistinctionFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="all">الجميع (افتراضي)</option>
+                    <option value="featured">المتميزين فقط ⭐</option>
+                    <option value="verified">الموثقين فقط ✅</option>
+                  </select>
+                </div>
+
+                {/* 3. Services search */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">البحث بالأدوية والخدمات</label>
+                  <input
+                    type="text"
+                    value={servicesSearch}
+                    onChange={(e) => setServicesSearch(e.target.value)}
+                    placeholder="توصيل منازل، تركيبات دوائية..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* 4. Available Now toggle */}
+                <div className="flex flex-col justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setAvailableNowFilter(!availableNowFilter)}
+                    className={`w-full flex items-center justify-between border rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      availableNowFilter
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 ring-2 ring-emerald-100'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2.5 h-2.5 rounded-full ${availableNowFilter ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                      <span>المفتوحة الآن فقط</span>
+                    </div>
+                    {availableNowFilter && <Check className="h-4 w-4 text-emerald-600" />}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Grid listing */}
             {(() => {
               let filtered = pharmacies.filter(ph => {
                 const query = pharmSearch.toLowerCase().trim();
-                return !query || ph.name.toLowerCase().includes(query) || ph.address.toLowerCase().includes(query);
+                const matchQuery = !query || ph.name.toLowerCase().includes(query) || ph.address.toLowerCase().includes(query);
+
+                // 1. Village match
+                const matchVillage = !villageFilter || 
+                  (ph.village && ph.village.includes(villageFilter)) ||
+                  (ph.address && ph.address.includes(villageFilter));
+                
+                // 2. Available now
+                let matchAvailable = true;
+                if (availableNowFilter) {
+                  const status = checkActivityStatus(ph);
+                  matchAvailable = status.isOpen;
+                }
+
+                // 3. Distinction
+                let matchDistinction = true;
+                if (distinctionFilter === 'featured') {
+                  matchDistinction = !!ph.isFeatured;
+                } else if (distinctionFilter === 'verified') {
+                  matchDistinction = !!ph.isVerified;
+                }
+
+                // 4. Services Search
+                let matchServices = true;
+                if (servicesSearch.trim()) {
+                  const sQuery = servicesSearch.toLowerCase().trim();
+                  matchServices = ph.servicesProvided ? 
+                    ph.servicesProvided.some(s => s.toLowerCase().includes(sQuery)) : false;
+                }
+
+                return matchQuery && matchVillage && matchAvailable && matchDistinction && matchServices;
               });
 
-              if (pharmSort === 'name-asc') {
-                filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-              } else if (pharmSort === 'name-desc') {
-                filtered = [...filtered].sort((a, b) => b.name.localeCompare(a.name, 'ar'));
-              } else {
-                filtered = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-              }
+              filtered = sortListings(filtered, pharmSort);
 
               if (filtered.length === 0) {
                 return (
@@ -1287,27 +1600,150 @@ export default function App() {
                   onChange={(e) => setLabSort(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all duration-200"
                 >
+                  <option value="smart">الترتيب الذكي (الافتراضي)</option>
                   <option value="recent">الأحدث تسجيلاً</option>
                   <option value="name-asc">الاسم (أ إلى ي)</option>
                   <option value="name-desc">الاسم (ي إلى أ)</option>
                 </select>
               </div>
+
+              {/* Toggle Advanced Filters Button */}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 justify-center px-4 py-3.5 text-sm font-bold rounded-xl border transition-all duration-200 shrink-0 ${
+                  showAdvancedFilters || villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch
+                    ? 'bg-purple-50 text-purple-700 border-purple-200 ring-2 ring-purple-100'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                <span>خيارات بحث متقدم</span>
+                {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                  <span className="bg-purple-600 text-white rounded-full w-2 h-2" />
+                )}
+              </button>
+
+              {/* Clear Filters Button */}
+              {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                <button 
+                  onClick={() => {
+                    setVillageFilter('');
+                    setAvailableNowFilter(false);
+                    setDistinctionFilter('all');
+                    setServicesSearch('');
+                  }}
+                  className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 py-2 px-3 rounded-xl transition-colors flex items-center gap-1.5 justify-center"
+                >
+                  <Clock className="h-3.5 w-3.5 rotate-180" />
+                  <span>إعادة تعيين</span>
+                </button>
+              )}
             </div>
+
+            {/* Advanced Filters Panel */}
+            {showAdvancedFilters && (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-8 animate-fadeIn grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {/* 1. Village/Area Select */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">تصفية حسب القرية / المنطقة</label>
+                  <select
+                    value={villageFilter}
+                    onChange={(e) => setVillageFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="">جميع قرى الوقف</option>
+                    {['مدينة الوقف', 'المراشدة', 'القلمينا', 'دمو', 'العبل', 'بني كود', 'السنابسة'].map((v, i) => (
+                      <option key={i} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Distinction Type */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">نوع التميز والتوثيق</label>
+                  <select
+                    value={distinctionFilter}
+                    onChange={(e) => setDistinctionFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="all">الجميع (افتراضي)</option>
+                    <option value="featured">المتميزين فقط ⭐</option>
+                    <option value="verified">الموثقين فقط ✅</option>
+                  </select>
+                </div>
+
+                {/* 3. Services search */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">البحث بالفحوصات والتحاليل</label>
+                  <input
+                    type="text"
+                    value={servicesSearch}
+                    onChange={(e) => setServicesSearch(e.target.value)}
+                    placeholder="رسم قلب، سونار، وظائف كبد..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* 4. Available Now toggle */}
+                <div className="flex flex-col justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setAvailableNowFilter(!availableNowFilter)}
+                    className={`w-full flex items-center justify-between border rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      availableNowFilter
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 ring-2 ring-emerald-100'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2.5 h-2.5 rounded-full ${availableNowFilter ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                      <span>المفتوحة الآن فقط</span>
+                    </div>
+                    {availableNowFilter && <Check className="h-4 w-4 text-emerald-600" />}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Grid listing */}
             {(() => {
               let filtered = labs.filter(l => {
                 const query = labSearch.toLowerCase().trim();
-                return !query || l.name.toLowerCase().includes(query) || l.address.toLowerCase().includes(query);
+                const matchQuery = !query || l.name.toLowerCase().includes(query) || l.address.toLowerCase().includes(query);
+
+                // 1. Village match
+                const matchVillage = !villageFilter || 
+                  (l.village && l.village.includes(villageFilter)) ||
+                  (l.address && l.address.includes(villageFilter));
+                
+                // 2. Available now
+                let matchAvailable = true;
+                if (availableNowFilter) {
+                  const status = checkActivityStatus(l);
+                  matchAvailable = status.isOpen;
+                }
+
+                // 3. Distinction
+                let matchDistinction = true;
+                if (distinctionFilter === 'featured') {
+                  matchDistinction = !!l.isFeatured;
+                } else if (distinctionFilter === 'verified') {
+                  matchDistinction = !!l.isVerified;
+                }
+
+                // 4. Services Search
+                let matchServices = true;
+                if (servicesSearch.trim()) {
+                  const sQuery = servicesSearch.toLowerCase().trim();
+                  matchServices = l.servicesProvided ? 
+                    l.servicesProvided.some(s => s.toLowerCase().includes(sQuery)) : false;
+                }
+
+                return matchQuery && matchVillage && matchAvailable && matchDistinction && matchServices;
               });
 
-              if (labSort === 'name-asc') {
-                filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-              } else if (labSort === 'name-desc') {
-                filtered = [...filtered].sort((a, b) => b.name.localeCompare(a.name, 'ar'));
-              } else {
-                filtered = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-              }
+              filtered = sortListings(filtered, labSort);
 
               if (filtered.length === 0) {
                 return (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Phone, MapPin, Share2, Printer, Check, Copy, AlertCircle, Stethoscope, Pill, FlaskConical } from 'lucide-react';
+import { Phone, MapPin, Share2, Printer, Check, Copy, AlertCircle, Stethoscope, Pill, FlaskConical, Award, Clock } from 'lucide-react';
 import { Doctor, Pharmacy, Lab, Ad } from '../data/initialData';
+import { checkActivityStatus } from '../lib/activityStatus';
 
 interface ListingCardProps {
   key?: any;
@@ -127,33 +128,82 @@ ${item.whatsapp ? `💬 *واتساب:* +${item.whatsapp}` : ''}
     }, 500);
   };
 
+  // 2 Days "New" check
+  const isNew = item.createdAt 
+    ? (Date.now() - new Date(item.createdAt).getTime()) < 2 * 24 * 60 * 60 * 1000 
+    : false;
+
+  // Activity Status Calculation
+  const activity = checkActivityStatus(item);
+
   return (
     <>
       <div 
-        className={`bg-white rounded-2xl border border-slate-150 shadow-sm hover:shadow-md hover:border-slate-250 transition-all duration-300 flex flex-col justify-between overflow-hidden group ${style.borderHover}`}
+        className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col justify-between overflow-hidden group ${
+          item.isFeatured 
+            ? 'border-amber-300 bg-gradient-to-br from-amber-50/20 to-white shadow-amber-50/40 shadow-md ring-1 ring-amber-200/50' 
+            : 'border-slate-150 shadow-sm'
+        } ${style.borderHover}`}
         id={`listing-card-${item.id}`}
       >
         <div className="p-6">
           {/* Badge & Type Header */}
-          <div className="flex justify-between items-start mb-4">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${style.badge}`}>
-              {type === 'doctor' ? (
-                <>
-                  <Stethoscope className="h-3.5 w-3.5" />
-                  <span>طبيب: {(item as Doctor).specialty}</span>
-                </>
-              ) : type === 'pharmacy' ? (
-                <>
-                  <Pill className="h-3.5 w-3.5" />
-                  <span>صيدلية معتمدة</span>
-                </>
-              ) : (
-                <>
-                  <FlaskConical className="h-3.5 w-3.5" />
-                  <span>معمل تحاليل وأشعة</span>
-                </>
+          <div className="flex flex-wrap justify-between items-start gap-2 mb-4">
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${style.badge}`}>
+                {type === 'doctor' ? (
+                  <>
+                    <Stethoscope className="h-3.5 w-3.5" />
+                    <span>طبيب: {(item as Doctor).specialty}</span>
+                  </>
+                ) : type === 'pharmacy' ? (
+                  <>
+                    <Pill className="h-3.5 w-3.5" />
+                    <span>صيدلية معتمدة</span>
+                  </>
+                ) : (
+                  <>
+                    <FlaskConical className="h-3.5 w-3.5" />
+                    <span>معمل تحاليل وأشعة</span>
+                  </>
+                )}
+              </span>
+
+              {item.isFeatured && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-500 text-white border border-amber-400 shadow-sm animate-pulse">
+                  ⭐ مميز
+                </span>
               )}
-            </span>
+
+              {item.isVerified && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-black bg-emerald-600 text-white border border-emerald-500 shadow-sm">
+                  ✅ موثق
+                </span>
+              )}
+
+              {isNew && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-black bg-rose-500 text-white border border-rose-400 shadow-sm">
+                  🆕 جديد
+                </span>
+              )}
+
+              {item.isPinned && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-600 text-white border border-indigo-500 shadow-sm" title={item.pinExpiryDate ? `حتى ${new Date(item.pinExpiryDate).toLocaleDateString('ar-EG')}` : 'تثبيت دائم'}>
+                  📌 مثبت
+                </span>
+              )}
+
+              {item.packageTier && item.packageTier !== 'normal' && (
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-black border shadow-sm ${
+                  item.packageTier === 'diamond' ? 'bg-indigo-50 text-indigo-800 border-indigo-200' :
+                  item.packageTier === 'gold' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                  'bg-slate-100 text-slate-800 border-slate-200'
+                }`}>
+                  {item.packageTier === 'diamond' ? '💎 ماسي' :
+                   item.packageTier === 'gold' ? '🥇 ذهبي' : '🥈 فضي'}
+                </span>
+              )}
+            </div>
 
             {/* Quick Share / Print Actions */}
             <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
@@ -175,8 +225,10 @@ ${item.whatsapp ? `💬 *واتساب:* +${item.whatsapp}` : ''}
           </div>
 
           {/* Title & Organization Name */}
-          <h3 className={`text-lg font-bold text-slate-900 transition-colors duration-200 mb-2 leading-relaxed ${style.titleHover}`}>
-            {item.name}
+          <h3 className={`text-lg font-extrabold text-slate-900 transition-colors duration-200 mb-2 leading-relaxed flex items-center flex-wrap gap-1.5 ${style.titleHover}`}>
+            <span>{item.name}</span>
+            {item.isVerified && <span className="text-emerald-500 text-base" title="موثق">✓</span>}
+            {item.isFeatured && <span className="text-amber-500 text-base" title="مميز">⭐</span>}
           </h3>
 
           {/* Special fields for Doctor */}
@@ -190,13 +242,50 @@ ${item.whatsapp ? `💬 *واتساب:* +${item.whatsapp}` : ''}
           {/* Address */}
           <div className="flex items-start gap-2 text-slate-600 text-sm mb-3">
             <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-            <span className="leading-relaxed">{item.address}</span>
+            <span className="leading-relaxed">{item.address} {item.village ? `(${item.village})` : ''}</span>
           </div>
 
           {/* Phone Display */}
           <div className="flex items-center gap-2 text-slate-700 text-sm font-bold mb-2">
             <span className="text-slate-400">📞</span>
             <span className="font-mono tracking-wider">{item.phone}</span>
+          </div>
+
+          {/* Services Provided Section */}
+          {item.servicesProvided && item.servicesProvided.length > 0 && (
+            <div className="mt-3.5 mb-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/80">
+              <span className="text-[10px] font-extrabold text-slate-400 block mb-1.5">الخدمات المقدمة:</span>
+              <div className="flex flex-wrap gap-1">
+                {item.servicesProvided.map((srv, idx) => (
+                  <span key={idx} className="bg-white text-slate-700 text-[10.5px] font-bold px-2 py-0.5 rounded-md border border-slate-200">
+                    {srv}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Activity status and working hours display */}
+          <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-extrabold ${activity.colorClass}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${activity.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                {activity.statusText}
+              </span>
+
+              {item.startDay && item.endDay && item.openHour && item.closeHour && (
+                <div className="text-[10.5px] font-bold text-slate-500 flex items-center gap-1" dir="rtl">
+                  <Clock className="h-3 w-3 text-slate-400" />
+                  <span>من {item.startDay} إلى {item.endDay} ({item.openHour} - {item.closeHour})</span>
+                </div>
+              )}
+            </div>
+
+            {item.daysOff && item.daysOff.length > 0 && (
+              <div className="text-[10px] font-semibold text-rose-500">
+                🔴 العطلة الأسبوعية: {item.daysOff.join('، ')}
+              </div>
+            )}
           </div>
 
           {/* Ad banner in the card if active */}
@@ -207,6 +296,13 @@ ${item.whatsapp ? `💬 *واتساب:* +${item.whatsapp}` : ''}
                 <span className={style.adTitle}>{activeAd.title}</span>
               </div>
               <p className="opacity-90 leading-relaxed font-semibold">{activeAd.content}</p>
+            </div>
+          )}
+
+          {/* Last Updated Timestamp */}
+          {item.lastUpdated && (
+            <div className="text-[9px] font-bold text-slate-400 mt-3 text-left">
+              آخر تحديث: {new Date(item.lastUpdated).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}
             </div>
           )}
         </div>
@@ -274,8 +370,15 @@ ${item.whatsapp ? `💬 *واتساب:* +${item.whatsapp}` : ''}
 
               <div className="text-right">
                 <span className="text-xs font-bold text-slate-400 block">العنوان بالتفصيل:</span>
-                <span className="text-base font-semibold text-slate-800 leading-relaxed">{item.address}</span>
+                <span className="text-base font-semibold text-slate-800 leading-relaxed">{item.address} {item.village ? `(${item.village})` : ''}</span>
               </div>
+
+              {item.servicesProvided && item.servicesProvided.length > 0 && (
+                <div className="text-right">
+                  <span className="text-xs font-bold text-slate-400 block">الخدمات المقدمة:</span>
+                  <span className="text-sm font-semibold text-slate-800 leading-relaxed">{item.servicesProvided.join('، ')}</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
                 <div className="text-right">

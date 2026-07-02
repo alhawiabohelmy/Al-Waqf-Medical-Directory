@@ -397,9 +397,65 @@ export default function AdminPanel({
   
   // Entity Form State
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [docForm, setDocForm] = useState({ name: '', specialty: specialties[0] || '', clinicName: '', address: '', phone: '', whatsapp: '' });
-  const [pharmForm, setPharmForm] = useState({ name: '', address: '', phone: '', whatsapp: '' });
-  const [labForm, setLabForm] = useState({ name: '', address: '', phone: '', whatsapp: '' });
+  const [docForm, setDocForm] = useState({
+    name: '',
+    specialty: specialties[0] || '',
+    clinicName: '',
+    address: '',
+    phone: '',
+    whatsapp: '',
+    isFeatured: false,
+    isVerified: false,
+    isPinned: false,
+    pinDuration: '7' as '7' | '30' | '90' | 'permanent',
+    pinExpiryDate: '',
+    packageTier: 'normal' as 'normal' | 'silver' | 'gold' | 'diamond',
+    servicesProvided: '',
+    startDay: 'السبت',
+    endDay: 'الخميس',
+    openHour: '09:00',
+    closeHour: '21:00',
+    daysOff: [] as string[],
+    village: ''
+  });
+  const [pharmForm, setPharmForm] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    whatsapp: '',
+    isFeatured: false,
+    isVerified: false,
+    isPinned: false,
+    pinDuration: '7' as '7' | '30' | '90' | 'permanent',
+    pinExpiryDate: '',
+    packageTier: 'normal' as 'normal' | 'silver' | 'gold' | 'diamond',
+    servicesProvided: '',
+    startDay: 'السبت',
+    endDay: 'الخميس',
+    openHour: '09:00',
+    closeHour: '21:00',
+    daysOff: [] as string[],
+    village: ''
+  });
+  const [labForm, setLabForm] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    whatsapp: '',
+    isFeatured: false,
+    isVerified: false,
+    isPinned: false,
+    pinDuration: '7' as '7' | '30' | '90' | 'permanent',
+    pinExpiryDate: '',
+    packageTier: 'normal' as 'normal' | 'silver' | 'gold' | 'diamond',
+    servicesProvided: '',
+    startDay: 'السبت',
+    endDay: 'الخميس',
+    openHour: '09:00',
+    closeHour: '21:00',
+    daysOff: [] as string[],
+    village: ''
+  });
   const [newSpecialty, setNewSpecialty] = useState('');
   
   // Ad Form State
@@ -464,83 +520,99 @@ export default function AdminPanel({
       };
       const currentTypeLabel = typeLabels[serviceType] || 'خدمة طبية';
 
-      // If the admin is approving the request (setting status to 'accepted' or 'published')
-      const isApproving = (newStatus === 'accepted' || newStatus === 'published');
-
-      if (isApproving) {
-        let targetCollection = 'doctors';
+      // If transition to 'published' and not already published, add listing to the respective collection
+      if (newStatus === 'published' && req.status !== 'published') {
         let newId = '';
-        let typeLabel = 'طبيب';
 
-        if (serviceType === 'pharmacy') {
-          targetCollection = 'pharmacies';
-          newId = `pharm-${Date.now()}`;
-          typeLabel = 'صيدلية';
-        } else if (serviceType === 'lab' || serviceType === 'scan_center') {
-          targetCollection = 'labs';
-          newId = `lab-${Date.now()}`;
-          typeLabel = serviceType === 'scan_center' ? 'مركز أشعة' : 'معمل تحاليل';
-        } else {
-          targetCollection = 'doctors';
+        if (serviceType === 'doctor') {
           newId = `doc-${Date.now()}`;
-          if (serviceType === 'hospital') typeLabel = 'مستشفى';
-          else if (serviceType === 'physiotherapy') typeLabel = 'مركز علاج طبيعي';
-          else if (serviceType === 'doctor') typeLabel = 'طبيب';
-          else typeLabel = 'خدمة طبية أخرى';
-        }
-
-        // Prepare specialty and clinicName defaults based on type if not present
-        let specialty = req.specialty || '';
-        let clinicName = req.clinicName || '';
-
-        if (serviceType === 'hospital') {
-          specialty = 'مستشفى / مركز طبي';
-          clinicName = 'قسم الاستقبال والطوارئ';
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: req.specialty || 'تخصص عام',
+            clinicName: req.clinicName || 'عيادة خاصة',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر بيانات الطبيب الجديد: ${req.name} من طلب الرقم: ${req.id}`);
+        } else if (serviceType === 'pharmacy') {
+          newId = `pharm-${Date.now()}`;
+          const displayName = req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : '');
+          const newPharm: Pharmacy = {
+            id: newId,
+            name: displayName,
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'pharmacies', newId), newPharm);
+          onUpdatePharmacies([newPharm, ...pharmacies]);
+          onAddLog('إضافة', 'pharmacy', `تم قبول ونشر الصيدلية الجديدة: ${req.name} من طلب الرقم: ${req.id}`);
+        } else if (serviceType === 'lab' || serviceType === 'scan_center') {
+          newId = `lab-${Date.now()}`;
+          const suffix = serviceType === 'scan_center' ? ' (مركز أشعة)' : '';
+          const newLab: Lab = {
+            id: newId,
+            name: req.name + suffix,
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'labs', newId), newLab);
+          onUpdateLabs([newLab, ...labs]);
+          onAddLog('إضافة', 'lab', `تم قبول ونشر ${currentTypeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
+        } else if (serviceType === 'hospital') {
+          newId = `doc-${Date.now()}`;
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: 'مستشفى / مركز طبي',
+            clinicName: 'قسم الاستقبال والطوارئ',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر مستشفى جديد: ${req.name} من طلب الرقم: ${req.id}`);
         } else if (serviceType === 'physiotherapy') {
-          specialty = 'علاج طبيعي وتأهيل';
-          clinicName = 'مركز علاج طبيعي';
-        } else if (serviceType === 'other') {
-          specialty = req.shortDescription || 'خدمة طبية أخرى';
-          clinicName = 'خدمات طبية عامة';
-        } else if (serviceType === 'doctor' && !specialty) {
-          specialty = 'تخصص عام';
-          clinicName = 'عيادة خاصة';
+          newId = `doc-${Date.now()}`;
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: 'علاج طبيعي وتأهيل',
+            clinicName: 'مركز علاج طبيعي',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر مركز علاج طبيعي: ${req.name} من طلب الرقم: ${req.id}`);
+        } else {
+          newId = `doc-${Date.now()}`;
+          const newDoc: Doctor = {
+            id: newId,
+            name: req.name,
+            specialty: req.shortDescription || 'خدمة طبية أخرى',
+            clinicName: 'خدمات طبية عامة',
+            address: req.address,
+            phone: req.phone,
+            whatsapp: req.phone,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'doctors', newId), newDoc);
+          onUpdateDoctors([newDoc, ...doctors]);
+          onAddLog('إضافة', 'doctor', `تم قبول ونشر خدمة طبية أخرى: ${req.name} من طلب الرقم: ${req.id}`);
         }
-
-        const displayName = serviceType === 'pharmacy' 
-          ? (req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : ''))
-          : (serviceType === 'scan_center' ? (req.name + ' (مركز أشعة)') : req.name);
-
-        // Copy ALL data of the request and set approved, visible, status
-        const targetDocPayload: any = {
-          ...req, // copies all properties (e.g. name, phone, address, whatsapp, governorate, center, notes, etc.)
-          id: newId,
-          name: displayName,
-          specialty,
-          clinicName,
-          approved: true,
-          visible: true,
-          status: 'published',
-          hidden: false,
-          createdAt: new Date().toISOString()
-        };
-
-        // Save in Firestore target collection
-        await setDoc(doc(db, targetCollection, newId), targetDocPayload);
-
-        // Update corresponding state array so it shows up in UI immediately
-        if (targetCollection === 'doctors') {
-          onUpdateDoctors([targetDocPayload as Doctor, ...doctors]);
-        } else if (targetCollection === 'pharmacies') {
-          onUpdatePharmacies([targetDocPayload as Pharmacy, ...pharmacies]);
-        } else if (targetCollection === 'labs') {
-          onUpdateLabs([targetDocPayload as Lab, ...labs]);
-        }
-
-        onAddLog('إضافة', serviceType as any, `تم قبول ونشر ${typeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
-
-        // Force request status to become 'published' (تم النشر) as required
-        newStatus = 'published';
       }
 
       const historyEntry = {
@@ -745,28 +817,93 @@ export default function AdminPanel({
     }
     
     try {
+      const servicesArray = docForm.servicesProvided
+        ? docForm.servicesProvided.split(/,|،/).map(s => s.trim()).filter(Boolean)
+        : [];
+
+      let calculatedPinExpiry = '';
+      if (docForm.isPinned) {
+        if (docForm.pinDuration !== 'permanent') {
+          const days = parseInt(docForm.pinDuration || '7', 10);
+          const expiry = new Date();
+          expiry.setDate(expiry.getDate() + days);
+          calculatedPinExpiry = expiry.toISOString();
+        } else {
+          calculatedPinExpiry = '';
+        }
+      }
+
+      const docData = {
+        name: docForm.name,
+        specialty: docForm.specialty,
+        clinicName: docForm.clinicName,
+        address: docForm.address,
+        phone: docForm.phone,
+        whatsapp: docForm.whatsapp,
+        isFeatured: docForm.isFeatured,
+        isVerified: docForm.isVerified,
+        isPinned: docForm.isPinned,
+        pinDuration: docForm.pinDuration,
+        pinExpiryDate: calculatedPinExpiry,
+        packageTier: docForm.packageTier,
+        servicesProvided: servicesArray,
+        startDay: docForm.startDay,
+        endDay: docForm.endDay,
+        openHour: docForm.openHour,
+        closeHour: docForm.closeHour,
+        daysOff: docForm.daysOff,
+        village: docForm.village,
+        lastUpdated: new Date().toISOString()
+      };
+
+      const emptyDocForm = {
+        name: '',
+        specialty: specialties[0] || '',
+        clinicName: '',
+        address: '',
+        phone: '',
+        whatsapp: '',
+        isFeatured: false,
+        isVerified: false,
+        isPinned: false,
+        pinDuration: '7' as '7' | '30' | '90' | 'permanent',
+        pinExpiryDate: '',
+        packageTier: 'normal' as 'normal' | 'silver' | 'gold' | 'diamond',
+        servicesProvided: '',
+        startDay: 'السبت',
+        endDay: 'الخميس',
+        openHour: '09:00',
+        closeHour: '21:00',
+        daysOff: [] as string[],
+        village: ''
+      };
+
       if (editingId && editingId !== 'new') {
         console.log(`Firebase: Updating doctor ${editingId}...`);
+        const existingDoc = doctors.find(d => d.id === editingId);
         const updatedDoc = {
-          ...docForm,
-          id: editingId
+          ...docData,
+          id: editingId,
+          createdAt: existingDoc?.createdAt || new Date().toISOString(),
+          hidden: existingDoc?.hidden || false
         };
         await setDoc(doc(db, 'doctors', editingId), updatedDoc);
         console.log(`Firebase: Doctor ${editingId} updated successfully.`);
 
-        const updated = doctors.map(d => d.id === editingId ? { ...d, ...docForm } : d);
+        const updated = doctors.map(d => d.id === editingId ? updatedDoc : d);
         onUpdateDoctors(updated);
         onAddLog('تعديل', 'doctor', `تم تعديل بيانات الطبيب: ${docForm.name}`);
         onShowToast('✅ تم تعديل بيانات الطبيب بنجاح.');
         setEditingId(null);
-        setDocForm({ name: '', specialty: specialties[0] || '', clinicName: '', address: '', phone: '', whatsapp: '' });
+        setDocForm(emptyDocForm);
       } else {
         const newId = `doc-${Date.now()}`;
         console.log(`Firebase: Creating new doctor with ID ${newId}...`);
         const newDoc: Doctor = {
           id: newId,
-          ...docForm,
-          createdAt: new Date().toISOString()
+          ...docData,
+          createdAt: new Date().toISOString(),
+          hidden: false
         };
         await setDoc(doc(db, 'doctors', newId), newDoc);
         console.log(`Firebase: Doctor ${newId} saved successfully.`);
@@ -775,7 +912,7 @@ export default function AdminPanel({
         onAddLog('إضافة', 'doctor', `تمت إضافة الطبيب الجديد: ${docForm.name}`);
         onShowToast('✅ تمت إضافة الطبيب بنجاح.');
         setEditingId(null);
-        setDocForm({ name: '', specialty: specialties[0] || '', clinicName: '', address: '', phone: '', whatsapp: '' });
+        setDocForm(emptyDocForm);
       }
     } catch (error: any) {
       console.error("Firebase Error saving doctor:", error);
@@ -809,28 +946,89 @@ export default function AdminPanel({
     }
 
     try {
+      const servicesArray = pharmForm.servicesProvided
+        ? pharmForm.servicesProvided.split(/,|،/).map(s => s.trim()).filter(Boolean)
+        : [];
+
+      let calculatedPinExpiry = '';
+      if (pharmForm.isPinned) {
+        if (pharmForm.pinDuration !== 'permanent') {
+          const days = parseInt(pharmForm.pinDuration || '7', 10);
+          const expiry = new Date();
+          expiry.setDate(expiry.getDate() + days);
+          calculatedPinExpiry = expiry.toISOString();
+        } else {
+          calculatedPinExpiry = '';
+        }
+      }
+
+      const pharmData = {
+        name: pharmForm.name,
+        address: pharmForm.address,
+        phone: pharmForm.phone,
+        whatsapp: pharmForm.whatsapp,
+        isFeatured: pharmForm.isFeatured,
+        isVerified: pharmForm.isVerified,
+        isPinned: pharmForm.isPinned,
+        pinDuration: pharmForm.pinDuration,
+        pinExpiryDate: calculatedPinExpiry,
+        packageTier: pharmForm.packageTier,
+        servicesProvided: servicesArray,
+        startDay: pharmForm.startDay,
+        endDay: pharmForm.endDay,
+        openHour: pharmForm.openHour,
+        closeHour: pharmForm.closeHour,
+        daysOff: pharmForm.daysOff,
+        village: pharmForm.village,
+        lastUpdated: new Date().toISOString()
+      };
+
+      const emptyPharmForm = {
+        name: '',
+        address: '',
+        phone: '',
+        whatsapp: '',
+        isFeatured: false,
+        isVerified: false,
+        isPinned: false,
+        pinDuration: '7' as '7' | '30' | '90' | 'permanent',
+        pinExpiryDate: '',
+        packageTier: 'normal' as 'normal' | 'silver' | 'gold' | 'diamond',
+        servicesProvided: '',
+        startDay: 'السبت',
+        endDay: 'الخميس',
+        openHour: '09:00',
+        closeHour: '21:00',
+        daysOff: [] as string[],
+        village: ''
+      };
+
       if (editingId && editingId !== 'new') {
         console.log(`Firebase: Updating pharmacy ${editingId}...`);
+        const existingPharm = pharmacies.find(p => p.id === editingId);
         const updatedPharm = {
-          ...pharmForm,
-          id: editingId
+          ...pharmData,
+          id: editingId,
+          createdAt: existingPharm?.createdAt || new Date().toISOString(),
+          hidden: existingPharm?.hidden || false
         };
         await setDoc(doc(db, 'pharmacies', editingId), updatedPharm);
         console.log(`Firebase: Pharmacy ${editingId} updated successfully.`);
 
-        const updated = pharmacies.map(p => p.id === editingId ? { ...p, ...pharmForm } : p);
+        const updated = pharmacies.map(p => p.id === editingId ? updatedPharm : p);
         onUpdatePharmacies(updated);
         onAddLog('تعديل', 'pharmacy', `تم تعديل صيدلية: ${pharmForm.name}`);
         onShowToast('✅ تم تعديل الصيدلية بنجاح.');
         setEditingId(null);
-        setPharmForm({ name: '', address: '', phone: '', whatsapp: '' });
+        setPharmForm(emptyPharmForm);
       } else {
         const newId = `pharm-${Date.now()}`;
         console.log(`Firebase: Creating new pharmacy with ID ${newId}...`);
         const newPharm: Pharmacy = {
           id: newId,
-          ...pharmForm,
-          createdAt: new Date().toISOString()
+          ...pharmData,
+          createdAt: new Date().toISOString(),
+          hidden: false
         };
         await setDoc(doc(db, 'pharmacies', newId), newPharm);
         console.log(`Firebase: Pharmacy ${newId} saved successfully.`);
@@ -839,7 +1037,7 @@ export default function AdminPanel({
         onAddLog('إضافة', 'pharmacy', `تمت إضافة صيدلية جديدة: ${pharmForm.name}`);
         onShowToast('✅ تمت إضافة الصيدلية بنجاح.');
         setEditingId(null);
-        setPharmForm({ name: '', address: '', phone: '', whatsapp: '' });
+        setPharmForm(emptyPharmForm);
       }
     } catch (error: any) {
       console.error("Firebase Error saving pharmacy:", error);
@@ -873,28 +1071,89 @@ export default function AdminPanel({
     }
 
     try {
+      const servicesArray = labForm.servicesProvided
+        ? labForm.servicesProvided.split(/,|،/).map(s => s.trim()).filter(Boolean)
+        : [];
+
+      let calculatedPinExpiry = '';
+      if (labForm.isPinned) {
+        if (labForm.pinDuration !== 'permanent') {
+          const days = parseInt(labForm.pinDuration || '7', 10);
+          const expiry = new Date();
+          expiry.setDate(expiry.getDate() + days);
+          calculatedPinExpiry = expiry.toISOString();
+        } else {
+          calculatedPinExpiry = '';
+        }
+      }
+
+      const labData = {
+        name: labForm.name,
+        address: labForm.address,
+        phone: labForm.phone,
+        whatsapp: labForm.whatsapp,
+        isFeatured: labForm.isFeatured,
+        isVerified: labForm.isVerified,
+        isPinned: labForm.isPinned,
+        pinDuration: labForm.pinDuration,
+        pinExpiryDate: calculatedPinExpiry,
+        packageTier: labForm.packageTier,
+        servicesProvided: servicesArray,
+        startDay: labForm.startDay,
+        endDay: labForm.endDay,
+        openHour: labForm.openHour,
+        closeHour: labForm.closeHour,
+        daysOff: labForm.daysOff,
+        village: labForm.village,
+        lastUpdated: new Date().toISOString()
+      };
+
+      const emptyLabForm = {
+        name: '',
+        address: '',
+        phone: '',
+        whatsapp: '',
+        isFeatured: false,
+        isVerified: false,
+        isPinned: false,
+        pinDuration: '7' as '7' | '30' | '90' | 'permanent',
+        pinExpiryDate: '',
+        packageTier: 'normal' as 'normal' | 'silver' | 'gold' | 'diamond',
+        servicesProvided: '',
+        startDay: 'السبت',
+        endDay: 'الخميس',
+        openHour: '09:00',
+        closeHour: '21:00',
+        daysOff: [] as string[],
+        village: ''
+      };
+
       if (editingId && editingId !== 'new') {
         console.log(`Firebase: Updating lab ${editingId}...`);
+        const existingLab = labs.find(l => l.id === editingId);
         const updatedLab = {
-          ...labForm,
-          id: editingId
+          ...labData,
+          id: editingId,
+          createdAt: existingLab?.createdAt || new Date().toISOString(),
+          hidden: existingLab?.hidden || false
         };
         await setDoc(doc(db, 'labs', editingId), updatedLab);
         console.log(`Firebase: Lab ${editingId} updated successfully.`);
 
-        const updated = labs.map(l => l.id === editingId ? { ...l, ...labForm } : l);
+        const updated = labs.map(l => l.id === editingId ? updatedLab : l);
         onUpdateLabs(updated);
         onAddLog('تعديل', 'lab', `تم تعديل معمل التحاليل: ${labForm.name}`);
         onShowToast('✅ تم تعديل بيانات المعمل بنجاح.');
         setEditingId(null);
-        setLabForm({ name: '', address: '', phone: '', whatsapp: '' });
+        setLabForm(emptyLabForm);
       } else {
         const newId = `lab-${Date.now()}`;
         console.log(`Firebase: Creating new lab with ID ${newId}...`);
         const newLab: Lab = {
           id: newId,
-          ...labForm,
-          createdAt: new Date().toISOString()
+          ...labData,
+          createdAt: new Date().toISOString(),
+          hidden: false
         };
         await setDoc(doc(db, 'labs', newId), newLab);
         console.log(`Firebase: Lab ${newId} saved successfully.`);
@@ -903,7 +1162,7 @@ export default function AdminPanel({
         onAddLog('إضافة', 'lab', `تمت إضافة معمل تحاليل جديد: ${labForm.name}`);
         onShowToast('✅ تمت إضافة المعمل بنجاح.');
         setEditingId(null);
-        setLabForm({ name: '', address: '', phone: '', whatsapp: '' });
+        setLabForm(emptyLabForm);
       }
     } catch (error: any) {
       console.error("Firebase Error saving lab:", error);
@@ -2316,6 +2575,200 @@ export default function AdminPanel({
                       />
                     </div>
                   </div>
+
+                  {/* --- NEW DISTINCTION & WORK HOURS FIELDS --- */}
+                  <div className="border-t border-slate-200 pt-4 mt-4 space-y-4">
+                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">نظام التميز والتثبيت والتوثيق والخدمات</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Featured (مميز) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={docForm.isFeatured} 
+                          onChange={e => setDocForm({...docForm, isFeatured: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">⭐ تمييز الجهة (مميز)</span>
+                          <span className="text-[10px] text-slate-500">إضافة شارة وإطار ذهبي مضيء</span>
+                        </div>
+                      </label>
+
+                      {/* Verified (موثق) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={docForm.isVerified} 
+                          onChange={e => setDocForm({...docForm, isVerified: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">✅ توثيق الجهة (موثق)</span>
+                          <span className="text-[10px] text-slate-500">إضافة علامة التوثيق الخضراء</span>
+                        </div>
+                      </label>
+
+                      {/* Pinned (مثبت) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={docForm.isPinned} 
+                          onChange={e => setDocForm({...docForm, isPinned: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">📌 تثبيت الجهة في الأعلى</span>
+                          <span className="text-[10px] text-slate-500">للظهور في مقدمة التصنيف والبحث</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Pin Duration */}
+                      {docForm.isPinned && (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
+                          <select 
+                            value={docForm.pinDuration} 
+                            onChange={e => setDocForm({...docForm, pinDuration: e.target.value as any})}
+                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          >
+                            <option value="7">7 أيام (أسبوع)</option>
+                            <option value="30">30 يوماً (شهر)</option>
+                            <option value="90">90 يوماً (3 أشهر)</option>
+                            <option value="permanent">دائم حتى يتم إلغاؤه</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Package tier */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
+                        <select 
+                          value={docForm.packageTier} 
+                          onChange={e => setDocForm({...docForm, packageTier: e.target.value as any})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="normal">عادي (Normal)</option>
+                          <option value="silver">فضي (Silver)</option>
+                          <option value="gold">ذهبي (Gold)</option>
+                          <option value="diamond">ماسي (Diamond)</option>
+                        </select>
+                      </div>
+
+                      {/* Village/Area */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
+                        <input 
+                          type="text" 
+                          value={docForm.village} 
+                          onChange={e => setDocForm({...docForm, village: e.target.value})}
+                          placeholder="مثال: مدينة الوقف، المراشدة، القلمينا"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Services Provided */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">الخدمات المقدمة (افصل بينها بفاصلة أو حرف "،")</label>
+                      <textarea 
+                        value={docForm.servicesProvided} 
+                        onChange={e => setDocForm({...docForm, servicesProvided: e.target.value})}
+                        placeholder="مثال: سونار رباعي، كشف باطني، رسم قلب، استشارة مجانية"
+                        rows={2}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-4 space-y-4">
+                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">مواعيد العمل وحالة النشاط</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      {/* Start Day */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">يوم بداية العمل</label>
+                        <select 
+                          value={docForm.startDay} 
+                          onChange={e => setDocForm({...docForm, startDay: e.target.value})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* End Day */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">يوم نهاية العمل</label>
+                        <select 
+                          value={docForm.endDay} 
+                          onChange={e => setDocForm({...docForm, endDay: e.target.value})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Open Hour */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">ساعة الفتح (مثال 09:00)</label>
+                        <input 
+                          type="text" 
+                          value={docForm.openHour} 
+                          onChange={e => setDocForm({...docForm, openHour: e.target.value})}
+                          placeholder="HH:mm"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      {/* Close Hour */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">ساعة الإغلاق (مثال 22:00)</label>
+                        <input 
+                          type="text" 
+                          value={docForm.closeHour} 
+                          onChange={e => setDocForm({...docForm, closeHour: e.target.value})}
+                          placeholder="HH:mm"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Days Off (العطلة الأسبوعية) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">العطلة الأسبوعية (أيام الإجازة)</label>
+                      <div className="flex flex-wrap gap-3 bg-white p-3 border rounded-lg">
+                        {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => {
+                          const isOff = docForm.daysOff.includes(day);
+                          return (
+                            <label key={day} className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={isOff}
+                                onChange={() => {
+                                  if (isOff) {
+                                    setDocForm({...docForm, daysOff: docForm.daysOff.filter(d => d !== day)});
+                                  } else {
+                                    setDocForm({...docForm, daysOff: [...docForm.daysOff, day]});
+                                  }
+                                }}
+                                className="h-3.5 w-3.5 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                              />
+                              <span>{day}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex gap-2 justify-end pt-2">
                     <button type="submit" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs py-2 px-4 rounded-lg">حفظ البيانات</button>
                     <button type="button" onClick={() => setEditingId(null)} className="bg-slate-200 text-slate-700 text-xs py-2 px-4 rounded-lg">إلغاء</button>
@@ -2368,7 +2821,20 @@ export default function AdminPanel({
                                   clinicName: d.clinicName || '',
                                   address: d.address,
                                   phone: d.phone,
-                                  whatsapp: d.whatsapp || ''
+                                  whatsapp: d.whatsapp || '',
+                                  isFeatured: d.isFeatured || false,
+                                  isVerified: d.isVerified || false,
+                                  isPinned: d.isPinned || false,
+                                  pinDuration: d.pinDuration || '7',
+                                  pinExpiryDate: d.pinExpiryDate || '',
+                                  packageTier: d.packageTier || 'normal',
+                                  servicesProvided: d.servicesProvided ? d.servicesProvided.join('، ') : '',
+                                  startDay: d.startDay || 'السبت',
+                                  endDay: d.endDay || 'الخميس',
+                                  openHour: d.openHour || '09:00',
+                                  closeHour: d.closeHour || '21:00',
+                                  daysOff: d.daysOff || [],
+                                  village: d.village || ''
                                 });
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
@@ -2455,6 +2921,200 @@ export default function AdminPanel({
                       />
                     </div>
                   </div>
+
+                  {/* --- NEW DISTINCTION & WORK HOURS FIELDS --- */}
+                  <div className="border-t border-slate-200 pt-4 mt-4 space-y-4">
+                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">نظام التميز والتثبيت والتوثيق والخدمات للصيدلية</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Featured (مميز) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={pharmForm.isFeatured} 
+                          onChange={e => setPharmForm({...pharmForm, isFeatured: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">⭐ تمييز الصيدلية (مميز)</span>
+                          <span className="text-[10px] text-slate-500">إضافة شارة وإطار ذهبي مضيء</span>
+                        </div>
+                      </label>
+
+                      {/* Verified (موثق) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={pharmForm.isVerified} 
+                          onChange={e => setPharmForm({...pharmForm, isVerified: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">✅ توثيق الصيدلية (موثق)</span>
+                          <span className="text-[10px] text-slate-500">إضافة علامة التوثيق الخضراء</span>
+                        </div>
+                      </label>
+
+                      {/* Pinned (مثبت) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={pharmForm.isPinned} 
+                          onChange={e => setPharmForm({...pharmForm, isPinned: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">📌 تثبيت الصيدلية في الأعلى</span>
+                          <span className="text-[10px] text-slate-500">للظهور في مقدمة التصنيف والبحث</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Pin Duration */}
+                      {pharmForm.isPinned && (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
+                          <select 
+                            value={pharmForm.pinDuration} 
+                            onChange={e => setPharmForm({...pharmForm, pinDuration: e.target.value as any})}
+                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          >
+                            <option value="7">7 أيام (أسبوع)</option>
+                            <option value="30">30 يوماً (شهر)</option>
+                            <option value="90">90 يوماً (3 أشهر)</option>
+                            <option value="permanent">دائم حتى يتم إلغاؤه</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Package tier */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
+                        <select 
+                          value={pharmForm.packageTier} 
+                          onChange={e => setPharmForm({...pharmForm, packageTier: e.target.value as any})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="normal">عادي (Normal)</option>
+                          <option value="silver">فضي (Silver)</option>
+                          <option value="gold">ذهبي (Gold)</option>
+                          <option value="diamond">ماسي (Diamond)</option>
+                        </select>
+                      </div>
+
+                      {/* Village/Area */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
+                        <input 
+                          type="text" 
+                          value={pharmForm.village} 
+                          onChange={e => setPharmForm({...pharmForm, village: e.target.value})}
+                          placeholder="مثال: مدينة الوقف، المراشدة، القلمينا"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Services Provided */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">الخدمات والأدوية المتوفرة (افصل بينها بفاصلة أو حرف "،")</label>
+                      <textarea 
+                        value={pharmForm.servicesProvided} 
+                        onChange={e => setPharmForm({...pharmForm, servicesProvided: e.target.value})}
+                        placeholder="مثال: تركيبات دوائية، توصيل منازل، قياس ضغط وسكر، صرف روشتات التأمين"
+                        rows={2}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-4 space-y-4">
+                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">مواعيد عمل الصيدلية وحالة النشاط</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      {/* Start Day */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">يوم بداية العمل</label>
+                        <select 
+                          value={pharmForm.startDay} 
+                          onChange={e => setPharmForm({...pharmForm, startDay: e.target.value})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* End Day */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">يوم نهاية العمل</label>
+                        <select 
+                          value={pharmForm.endDay} 
+                          onChange={e => setPharmForm({...pharmForm, endDay: e.target.value})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Open Hour */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">ساعة الفتح (مثال 09:00)</label>
+                        <input 
+                          type="text" 
+                          value={pharmForm.openHour} 
+                          onChange={e => setPharmForm({...pharmForm, openHour: e.target.value})}
+                          placeholder="HH:mm"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      {/* Close Hour */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">ساعة الإغلاق (مثال 22:00)</label>
+                        <input 
+                          type="text" 
+                          value={pharmForm.closeHour} 
+                          onChange={e => setPharmForm({...pharmForm, closeHour: e.target.value})}
+                          placeholder="HH:mm"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Days Off (العطلة الأسبوعية) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">العطلة الأسبوعية (أيام الإجازة)</label>
+                      <div className="flex flex-wrap gap-3 bg-white p-3 border rounded-lg">
+                        {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => {
+                          const isOff = pharmForm.daysOff.includes(day);
+                          return (
+                            <label key={day} className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={isOff}
+                                onChange={() => {
+                                  if (isOff) {
+                                    setPharmForm({...pharmForm, daysOff: pharmForm.daysOff.filter(d => d !== day)});
+                                  } else {
+                                    setPharmForm({...pharmForm, daysOff: [...pharmForm.daysOff, day]});
+                                  }
+                                }}
+                                className="h-3.5 w-3.5 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                              />
+                              <span>{day}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex gap-2 justify-end pt-2">
                     <button type="submit" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs py-2 px-4 rounded-lg">حفظ البيانات</button>
                     <button type="button" onClick={() => setEditingId(null)} className="bg-slate-200 text-slate-700 text-xs py-2 px-4 rounded-lg">إلغاء</button>
@@ -2501,7 +3161,20 @@ export default function AdminPanel({
                                   name: p.name,
                                   address: p.address,
                                   phone: p.phone,
-                                  whatsapp: p.whatsapp || ''
+                                  whatsapp: p.whatsapp || '',
+                                  isFeatured: p.isFeatured || false,
+                                  isVerified: p.isVerified || false,
+                                  isPinned: p.isPinned || false,
+                                  pinDuration: p.pinDuration || '7',
+                                  pinExpiryDate: p.pinExpiryDate || '',
+                                  packageTier: p.packageTier || 'normal',
+                                  servicesProvided: p.servicesProvided ? p.servicesProvided.join('، ') : '',
+                                  startDay: p.startDay || 'السبت',
+                                  endDay: p.endDay || 'الخميس',
+                                  openHour: p.openHour || '09:00',
+                                  closeHour: p.closeHour || '21:00',
+                                  daysOff: p.daysOff || [],
+                                  village: p.village || ''
                                 });
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
@@ -2588,6 +3261,200 @@ export default function AdminPanel({
                       />
                     </div>
                   </div>
+
+                  {/* --- NEW DISTINCTION & WORK HOURS FIELDS --- */}
+                  <div className="border-t border-slate-200 pt-4 mt-4 space-y-4">
+                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">نظام التميز والتثبيت والتوثيق والخدمات للمعمل</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Featured (مميز) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={labForm.isFeatured} 
+                          onChange={e => setLabForm({...labForm, isFeatured: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">⭐ تمييز المعمل (مميز)</span>
+                          <span className="text-[10px] text-slate-500">إضافة شارة وإطار ذهبي مضيء</span>
+                        </div>
+                      </label>
+
+                      {/* Verified (موثق) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={labForm.isVerified} 
+                          onChange={e => setLabForm({...labForm, isVerified: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">✅ توثيق المعمل (موثق)</span>
+                          <span className="text-[10px] text-slate-500">إضافة علامة التوثيق الخضراء</span>
+                        </div>
+                      </label>
+
+                      {/* Pinned (مثبت) */}
+                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                        <input 
+                          type="checkbox" 
+                          checked={labForm.isPinned} 
+                          onChange={e => setLabForm({...labForm, isPinned: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">📌 تثبيت المعمل في الأعلى</span>
+                          <span className="text-[10px] text-slate-500">للظهور في مقدمة التصنيف والبحث</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Pin Duration */}
+                      {labForm.isPinned && (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
+                          <select 
+                            value={labForm.pinDuration} 
+                            onChange={e => setLabForm({...labForm, pinDuration: e.target.value as any})}
+                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          >
+                            <option value="7">7 أيام (أسبوع)</option>
+                            <option value="30">30 يوماً (شهر)</option>
+                            <option value="90">90 يوماً (3 أشهر)</option>
+                            <option value="permanent">دائم حتى يتم إلغاؤه</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Package tier */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
+                        <select 
+                          value={labForm.packageTier} 
+                          onChange={e => setLabForm({...labForm, packageTier: e.target.value as any})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="normal">عادي (Normal)</option>
+                          <option value="silver">فضي (Silver)</option>
+                          <option value="gold">ذهبي (Gold)</option>
+                          <option value="diamond">ماسي (Diamond)</option>
+                        </select>
+                      </div>
+
+                      {/* Village/Area */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
+                        <input 
+                          type="text" 
+                          value={labForm.village} 
+                          onChange={e => setLabForm({...labForm, village: e.target.value})}
+                          placeholder="مثال: مدينة الوقف، المراشدة، القلمينا"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Services Provided */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">الخدمات والتحاليل المتوفرة (افصل بينها بفاصلة أو حرف "،")</label>
+                      <textarea 
+                        value={labForm.servicesProvided} 
+                        onChange={e => setLabForm({...labForm, servicesProvided: e.target.value})}
+                        placeholder="مثال: تحليل وظائف كبد، رسم قلب، تحليل سكر صائم وفاطر، تحاليل هرمونات"
+                        rows={2}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-4 space-y-4">
+                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">مواعيد عمل المعمل وحالة النشاط</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      {/* Start Day */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">يوم بداية العمل</label>
+                        <select 
+                          value={labForm.startDay} 
+                          onChange={e => setLabForm({...labForm, startDay: e.target.value})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* End Day */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">يوم نهاية العمل</label>
+                        <select 
+                          value={labForm.endDay} 
+                          onChange={e => setLabForm({...labForm, endDay: e.target.value})}
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Open Hour */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">ساعة الفتح (مثال 09:00)</label>
+                        <input 
+                          type="text" 
+                          value={labForm.openHour} 
+                          onChange={e => setLabForm({...labForm, openHour: e.target.value})}
+                          placeholder="HH:mm"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      {/* Close Hour */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">ساعة الإغلاق (مثال 22:00)</label>
+                        <input 
+                          type="text" 
+                          value={labForm.closeHour} 
+                          onChange={e => setLabForm({...labForm, closeHour: e.target.value})}
+                          placeholder="HH:mm"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Days Off (العطلة الأسبوعية) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">العطلة الأسبوعية (أيام الإجازة)</label>
+                      <div className="flex flex-wrap gap-3 bg-white p-3 border rounded-lg">
+                        {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => {
+                          const isOff = labForm.daysOff.includes(day);
+                          return (
+                            <label key={day} className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={isOff}
+                                onChange={() => {
+                                  if (isOff) {
+                                    setLabForm({...labForm, daysOff: labForm.daysOff.filter(d => d !== day)});
+                                  } else {
+                                    setLabForm({...labForm, daysOff: [...labForm.daysOff, day]});
+                                  }
+                                }}
+                                className="h-3.5 w-3.5 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                              />
+                              <span>{day}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex gap-2 justify-end pt-2">
                     <button type="submit" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs py-2 px-4 rounded-lg">حفظ البيانات</button>
                     <button type="button" onClick={() => setEditingId(null)} className="bg-slate-200 text-slate-700 text-xs py-2 px-4 rounded-lg">إلغاء</button>
@@ -2634,7 +3501,20 @@ export default function AdminPanel({
                                   name: l.name,
                                   address: l.address,
                                   phone: l.phone,
-                                  whatsapp: l.whatsapp || ''
+                                  whatsapp: l.whatsapp || '',
+                                  isFeatured: l.isFeatured || false,
+                                  isVerified: l.isVerified || false,
+                                  isPinned: l.isPinned || false,
+                                  pinDuration: l.pinDuration || '7',
+                                  pinExpiryDate: l.pinExpiryDate || '',
+                                  packageTier: l.packageTier || 'normal',
+                                  servicesProvided: l.servicesProvided ? l.servicesProvided.join('، ') : '',
+                                  startDay: l.startDay || 'السبت',
+                                  endDay: l.endDay || 'الخميس',
+                                  openHour: l.openHour || '09:00',
+                                  closeHour: l.closeHour || '21:00',
+                                  daysOff: l.daysOff || [],
+                                  village: l.village || ''
                                 });
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
