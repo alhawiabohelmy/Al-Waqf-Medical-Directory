@@ -117,6 +117,7 @@ export function sortListings<T extends {
   pinExpiryDate?: string; 
   isFeatured?: boolean; 
   packageTier?: string; 
+  displayOrder?: number;
   lastUpdated?: string; 
   createdAt?: string; 
   name: string; 
@@ -139,20 +140,27 @@ export function sortListings<T extends {
     if (isAPinned && !isBPinned) return -1;
     if (!isAPinned && isBPinned) return 1;
     if (isAPinned && isBPinned) {
-      // Both are pinned, sort by lastUpdated or createdAt descending
+      // Both are pinned, sort by package tier, then displayOrder, then lastUpdated or createdAt descending
+      const TIER_PRIORITY: Record<string, number> = {
+        'diamond': 4,
+        'gold': 3,
+        'silver': 2,
+        'normal': 1
+      };
+      const tierA = TIER_PRIORITY[a.packageTier || 'normal'] || 1;
+      const tierB = TIER_PRIORITY[b.packageTier || 'normal'] || 1;
+      if (tierA !== tierB) return tierB - tierA;
+
+      const orderA = a.displayOrder !== undefined && a.displayOrder !== null && a.displayOrder > 0 ? a.displayOrder : Infinity;
+      const orderB = b.displayOrder !== undefined && b.displayOrder !== null && b.displayOrder > 0 ? b.displayOrder : Infinity;
+      if (orderA !== orderB) return orderA - orderB;
+
       const dateA = a.lastUpdated || a.createdAt || '';
       const dateB = b.lastUpdated || b.createdAt || '';
       return dateB.localeCompare(dateA);
     }
 
-    // 2. Featured Check
-    const isAFeatured = !!a.isFeatured;
-    const isBFeatured = !!b.isFeatured;
-
-    if (isAFeatured && !isBFeatured) return -1;
-    if (!isAFeatured && isBFeatured) return 1;
-
-    // 3. Package Tier Check (Diamond > Gold > Silver > Normal)
+    // 2. Package Tier Check (Diamond > Gold > Silver > Normal)
     const TIER_PRIORITY: Record<string, number> = {
       'diamond': 4,
       'gold': 3,
@@ -167,7 +175,21 @@ export function sortListings<T extends {
       return tierB - tierA; // Higher score comes first
     }
 
-    // 4. Fallback to Last Updated / Created At Descending
+    // 3. Featured Check
+    const isAFeatured = !!a.isFeatured;
+    const isBFeatured = !!b.isFeatured;
+
+    if (isAFeatured && !isBFeatured) return -1;
+    if (!isAFeatured && isBFeatured) return 1;
+
+    // 4. Manual Display Order (displayOrder) Check
+    const orderA = a.displayOrder !== undefined && a.displayOrder !== null && a.displayOrder > 0 ? a.displayOrder : Infinity;
+    const orderB = b.displayOrder !== undefined && b.displayOrder !== null && b.displayOrder > 0 ? b.displayOrder : Infinity;
+    if (orderA !== orderB) {
+      return orderA - orderB; // Lower number comes first (1, 2, 3...)
+    }
+
+    // 5. Fallback to Last Updated / Created At Descending
     const dateA = a.lastUpdated || a.createdAt || '';
     const dateB = b.lastUpdated || b.createdAt || '';
     return dateB.localeCompare(dateA);
@@ -826,10 +848,10 @@ export default function App() {
 
   // --- COMPILING NEWEST LISTINGS (LATEST ADDITIONS) ---
   const getLatestAdditions = () => {
-    // Collect with type references
-    const docsWType = doctors.slice(0, 2).map(d => ({ ...d, type: 'doctor' as const }));
-    const pharmsWType = pharmacies.slice(0, 1).map(p => ({ ...p, type: 'pharmacy' as const }));
-    const labsWType = labs.slice(0, 1).map(l => ({ ...l, type: 'lab' as const }));
+    // Collect with type references, only showing items that are not hidden and are marked for home display
+    const docsWType = doctors.filter(d => !d.hidden && d.showOnHome !== false).slice(0, 2).map(d => ({ ...d, type: 'doctor' as const }));
+    const pharmsWType = pharmacies.filter(p => !p.hidden && p.showOnHome !== false).slice(0, 1).map(p => ({ ...p, type: 'pharmacy' as const }));
+    const labsWType = labs.filter(l => !l.hidden && l.showOnHome !== false).slice(0, 1).map(l => ({ ...l, type: 'lab' as const }));
     
     return [...docsWType, ...pharmsWType, ...labsWType].slice(0, 3);
   };
@@ -845,7 +867,7 @@ export default function App() {
     let matchedLabs: any[] = [];
 
     if (globalSearchCategory === 'all' || globalSearchCategory === 'doctors') {
-      matchedDoctors = doctors.filter(doc => {
+      matchedDoctors = doctors.filter(doc => !doc.hidden && doc.showInSearch !== false).filter(doc => {
         if (!query) return true;
         return (
           doc.name.toLowerCase().includes(query) ||
@@ -858,7 +880,7 @@ export default function App() {
     }
 
     if (globalSearchCategory === 'all' || globalSearchCategory === 'pharmacies') {
-      matchedPharmacies = pharmacies.filter(ph => {
+      matchedPharmacies = pharmacies.filter(ph => !ph.hidden && ph.showInSearch !== false).filter(ph => {
         if (!query) return true;
         return (
           ph.name.toLowerCase().includes(query) ||
@@ -870,7 +892,7 @@ export default function App() {
     }
 
     if (globalSearchCategory === 'all' || globalSearchCategory === 'labs') {
-      matchedLabs = labs.filter(l => {
+      matchedLabs = labs.filter(l => !l.hidden && l.showInSearch !== false).filter(l => {
         if (!query) return true;
         return (
           l.name.toLowerCase().includes(query) ||
@@ -1282,7 +1304,7 @@ export default function App() {
             {/* Grid listing */}
             {(() => {
               // Apply filters
-              let filtered = doctors.filter(doc => {
+              let filtered = doctors.filter(doc => !doc.hidden && doc.showInSearch !== false).filter(doc => {
                 const query = doctorSearch.toLowerCase().trim();
                 const matchQuery = !query || 
                   doc.name.toLowerCase().includes(query) || 
@@ -1507,7 +1529,7 @@ export default function App() {
 
             {/* Grid listing */}
             {(() => {
-              let filtered = pharmacies.filter(ph => {
+              let filtered = pharmacies.filter(ph => !ph.hidden && ph.showInSearch !== false).filter(ph => {
                 const query = pharmSearch.toLowerCase().trim();
                 const matchQuery = !query || ph.name.toLowerCase().includes(query) || ph.address.toLowerCase().includes(query);
 
@@ -1708,7 +1730,7 @@ export default function App() {
 
             {/* Grid listing */}
             {(() => {
-              let filtered = labs.filter(l => {
+              let filtered = labs.filter(l => !l.hidden && l.showInSearch !== false).filter(l => {
                 const query = labSearch.toLowerCase().trim();
                 const matchQuery = !query || l.name.toLowerCase().includes(query) || l.address.toLowerCase().includes(query);
 

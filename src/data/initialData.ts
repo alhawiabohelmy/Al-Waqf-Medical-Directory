@@ -8,6 +8,8 @@ export interface Doctor {
   whatsapp?: string;
   createdAt: string;
   hidden?: boolean;
+  showOnHome?: boolean;
+  showInSearch?: boolean;
   isPinned?: boolean;
   displayOrder?: number;
   isFeatured?: boolean;
@@ -35,6 +37,8 @@ export interface Pharmacy {
   whatsapp?: string;
   createdAt: string;
   hidden?: boolean;
+  showOnHome?: boolean;
+  showInSearch?: boolean;
   isPinned?: boolean;
   displayOrder?: number;
   isFeatured?: boolean;
@@ -62,6 +66,8 @@ export interface Lab {
   whatsapp?: string;
   createdAt: string;
   hidden?: boolean;
+  showOnHome?: boolean;
+  showInSearch?: boolean;
   isPinned?: boolean;
   displayOrder?: number;
   isFeatured?: boolean;

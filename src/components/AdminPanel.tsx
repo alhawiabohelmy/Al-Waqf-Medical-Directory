@@ -416,7 +416,11 @@ export default function AdminPanel({
     openHour: '09:00',
     closeHour: '21:00',
     daysOff: [] as string[],
-    village: ''
+    village: '',
+    displayOrder: '',
+    hidden: false,
+    showOnHome: true,
+    showInSearch: true
   });
   const [pharmForm, setPharmForm] = useState({
     name: '',
@@ -435,7 +439,11 @@ export default function AdminPanel({
     openHour: '09:00',
     closeHour: '21:00',
     daysOff: [] as string[],
-    village: ''
+    village: '',
+    displayOrder: '',
+    hidden: false,
+    showOnHome: true,
+    showInSearch: true
   });
   const [labForm, setLabForm] = useState({
     name: '',
@@ -454,7 +462,11 @@ export default function AdminPanel({
     openHour: '09:00',
     closeHour: '21:00',
     daysOff: [] as string[],
-    village: ''
+    village: '',
+    displayOrder: '',
+    hidden: false,
+    showOnHome: true,
+    showInSearch: true
   });
   const [newSpecialty, setNewSpecialty] = useState('');
   
@@ -853,6 +865,10 @@ export default function AdminPanel({
         closeHour: docForm.closeHour,
         daysOff: docForm.daysOff,
         village: docForm.village,
+        displayOrder: parseInt(docForm.displayOrder || '0', 10) || 0,
+        hidden: docForm.hidden,
+        showOnHome: docForm.showOnHome !== false,
+        showInSearch: docForm.showInSearch !== false,
         lastUpdated: new Date().toISOString()
       };
 
@@ -875,7 +891,11 @@ export default function AdminPanel({
         openHour: '09:00',
         closeHour: '21:00',
         daysOff: [] as string[],
-        village: ''
+        village: '',
+        displayOrder: '',
+        hidden: false,
+        showOnHome: true,
+        showInSearch: true
       };
 
       if (editingId && editingId !== 'new') {
@@ -884,8 +904,7 @@ export default function AdminPanel({
         const updatedDoc = {
           ...docData,
           id: editingId,
-          createdAt: existingDoc?.createdAt || new Date().toISOString(),
-          hidden: existingDoc?.hidden || false
+          createdAt: existingDoc?.createdAt || new Date().toISOString()
         };
         await setDoc(doc(db, 'doctors', editingId), updatedDoc);
         console.log(`Firebase: Doctor ${editingId} updated successfully.`);
@@ -902,8 +921,7 @@ export default function AdminPanel({
         const newDoc: Doctor = {
           id: newId,
           ...docData,
-          createdAt: new Date().toISOString(),
-          hidden: false
+          createdAt: new Date().toISOString()
         };
         await setDoc(doc(db, 'doctors', newId), newDoc);
         console.log(`Firebase: Doctor ${newId} saved successfully.`);
@@ -980,6 +998,10 @@ export default function AdminPanel({
         closeHour: pharmForm.closeHour,
         daysOff: pharmForm.daysOff,
         village: pharmForm.village,
+        displayOrder: parseInt(pharmForm.displayOrder || '0', 10) || 0,
+        hidden: pharmForm.hidden,
+        showOnHome: pharmForm.showOnHome !== false,
+        showInSearch: pharmForm.showInSearch !== false,
         lastUpdated: new Date().toISOString()
       };
 
@@ -1000,7 +1022,11 @@ export default function AdminPanel({
         openHour: '09:00',
         closeHour: '21:00',
         daysOff: [] as string[],
-        village: ''
+        village: '',
+        displayOrder: '',
+        hidden: false,
+        showOnHome: true,
+        showInSearch: true
       };
 
       if (editingId && editingId !== 'new') {
@@ -1009,8 +1035,7 @@ export default function AdminPanel({
         const updatedPharm = {
           ...pharmData,
           id: editingId,
-          createdAt: existingPharm?.createdAt || new Date().toISOString(),
-          hidden: existingPharm?.hidden || false
+          createdAt: existingPharm?.createdAt || new Date().toISOString()
         };
         await setDoc(doc(db, 'pharmacies', editingId), updatedPharm);
         console.log(`Firebase: Pharmacy ${editingId} updated successfully.`);
@@ -1027,8 +1052,7 @@ export default function AdminPanel({
         const newPharm: Pharmacy = {
           id: newId,
           ...pharmData,
-          createdAt: new Date().toISOString(),
-          hidden: false
+          createdAt: new Date().toISOString()
         };
         await setDoc(doc(db, 'pharmacies', newId), newPharm);
         console.log(`Firebase: Pharmacy ${newId} saved successfully.`);
@@ -1105,6 +1129,10 @@ export default function AdminPanel({
         closeHour: labForm.closeHour,
         daysOff: labForm.daysOff,
         village: labForm.village,
+        displayOrder: parseInt(labForm.displayOrder || '0', 10) || 0,
+        hidden: labForm.hidden,
+        showOnHome: labForm.showOnHome !== false,
+        showInSearch: labForm.showInSearch !== false,
         lastUpdated: new Date().toISOString()
       };
 
@@ -1125,7 +1153,11 @@ export default function AdminPanel({
         openHour: '09:00',
         closeHour: '21:00',
         daysOff: [] as string[],
-        village: ''
+        village: '',
+        displayOrder: '',
+        hidden: false,
+        showOnHome: true,
+        showInSearch: true
       };
 
       if (editingId && editingId !== 'new') {
@@ -1134,8 +1166,7 @@ export default function AdminPanel({
         const updatedLab = {
           ...labData,
           id: editingId,
-          createdAt: existingLab?.createdAt || new Date().toISOString(),
-          hidden: existingLab?.hidden || false
+          createdAt: existingLab?.createdAt || new Date().toISOString()
         };
         await setDoc(doc(db, 'labs', editingId), updatedLab);
         console.log(`Firebase: Lab ${editingId} updated successfully.`);
@@ -1152,8 +1183,7 @@ export default function AdminPanel({
         const newLab: Lab = {
           id: newId,
           ...labData,
-          createdAt: new Date().toISOString(),
-          hidden: false
+          createdAt: new Date().toISOString()
         };
         await setDoc(doc(db, 'labs', newId), newLab);
         console.log(`Firebase: Lab ${newId} saved successfully.`);
@@ -2576,13 +2606,16 @@ export default function AdminPanel({
                     </div>
                   </div>
 
-                  {/* --- NEW DISTINCTION & WORK HOURS FIELDS --- */}
-                  <div className="border-t border-slate-200 pt-4 mt-4 space-y-4">
-                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">نظام التميز والتثبيت والتوثيق والخدمات</h4>
+                  {/* --- إدارة التميز والظهور --- */}
+                  <div className="border-t-2 border-dashed border-emerald-200 pt-5 mt-5 space-y-4 bg-emerald-50/20 p-4 rounded-xl border border-emerald-100 animate-fadeIn">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="p-1.5 bg-emerald-500 text-white rounded-lg"><Settings className="h-4 w-4" /></span>
+                      <h4 className="font-extrabold text-sm text-emerald-800">إدارة التميز والظهور للجهة</h4>
+                    </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {/* Featured (مميز) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={docForm.isFeatured} 
@@ -2591,12 +2624,12 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">⭐ تمييز الجهة (مميز)</span>
-                          <span className="text-[10px] text-slate-500">إضافة شارة وإطار ذهبي مضيء</span>
+                          <span className="text-[10px] text-slate-500 block">إضافة شارة وإطار ذهبي مضيء</span>
                         </div>
                       </label>
 
                       {/* Verified (موثق) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={docForm.isVerified} 
@@ -2605,12 +2638,12 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">✅ توثيق الجهة (موثق)</span>
-                          <span className="text-[10px] text-slate-500">إضافة علامة التوثيق الخضراء</span>
+                          <span className="text-[10px] text-slate-500 block">إضافة علامة التوثيق الخضراء</span>
                         </div>
                       </label>
 
                       {/* Pinned (مثبت) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={docForm.isPinned} 
@@ -2619,20 +2652,64 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">📌 تثبيت الجهة في الأعلى</span>
-                          <span className="text-[10px] text-slate-500">للظهور في مقدمة التصنيف والبحث</span>
+                          <span className="text-[10px] text-slate-500 block">للظهور في مقدمة التصنيف</span>
                         </div>
                       </label>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Hide / Show Toggle */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={docForm.hidden} 
+                          onChange={e => setDocForm({...docForm, hidden: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">👁️ إخفاء الجهة (مخفي)</span>
+                          <span className="text-[10px] text-slate-500 block">إخفاء مؤقت دون الحذف</span>
+                        </div>
+                      </label>
+
+                      {/* Show on Homepage */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={docForm.showOnHome} 
+                          onChange={e => setDocForm({...docForm, showOnHome: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">🏠 عرض بالصفحة الرئيسية</span>
+                          <span className="text-[10px] text-slate-500 block">تفعيل الظهور في الصفحة الرئيسية</span>
+                        </div>
+                      </label>
+
+                      {/* Show in Search Results */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={docForm.showInSearch} 
+                          onChange={e => setDocForm({...docForm, showInSearch: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">🔍 يظهر في نتائج البحث</span>
+                          <span className="text-[10px] text-slate-500 block">تفعيل الظهور في نتائج البحث والتصنيفات</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                       {/* Pin Duration */}
                       {docForm.isPinned && (
                         <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
                           <select 
                             value={docForm.pinDuration} 
                             onChange={e => setDocForm({...docForm, pinDuration: e.target.value as any})}
-                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                           >
                             <option value="7">7 أيام (أسبوع)</option>
                             <option value="30">30 يوماً (شهر)</option>
@@ -2644,41 +2721,54 @@ export default function AdminPanel({
 
                       {/* Package tier */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
                         <select 
                           value={docForm.packageTier} 
                           onChange={e => setDocForm({...docForm, packageTier: e.target.value as any})}
-                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                         >
                           <option value="normal">عادي (Normal)</option>
-                          <option value="silver">فضي (Silver)</option>
-                          <option value="gold">ذهبي (Gold)</option>
-                          <option value="diamond">ماسي (Diamond)</option>
+                          <option value="silver">🥈 فضي (Silver)</option>
+                          <option value="gold">🥇 ذهبي (Gold)</option>
+                          <option value="diamond">💎 ماسي (Diamond)</option>
                         </select>
                       </div>
 
-                      {/* Village/Area */}
+                      {/* Manual Sort Order */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">الترتيب اليدوي للظهور</label>
+                        <input 
+                          type="number" 
+                          value={docForm.displayOrder} 
+                          onChange={e => setDocForm({...docForm, displayOrder: e.target.value})}
+                          placeholder="ترتيب رقمي تصاعدي"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left font-bold"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      {/* Village/Area */}
+                      <div className={docForm.isPinned ? "" : "sm:col-span-2"}>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
                         <input 
                           type="text" 
                           value={docForm.village} 
                           onChange={e => setDocForm({...docForm, village: e.target.value})}
-                          placeholder="مثال: مدينة الوقف، المراشدة، القلمينا"
-                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          placeholder="مدينة الوقف، المراشدة..."
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                         />
                       </div>
                     </div>
 
                     {/* Services Provided */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">الخدمات المقدمة (افصل بينها بفاصلة أو حرف "،")</label>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">الخدمات المقدمة (افصل بينها بفاصلة أو حرف "،")</label>
                       <textarea 
                         value={docForm.servicesProvided} 
                         onChange={e => setDocForm({...docForm, servicesProvided: e.target.value})}
                         placeholder="مثال: سونار رباعي، كشف باطني، رسم قلب، استشارة مجانية"
                         rows={2}
-                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none font-bold text-slate-700"
                       />
                     </div>
                   </div>
@@ -2834,7 +2924,11 @@ export default function AdminPanel({
                                   openHour: d.openHour || '09:00',
                                   closeHour: d.closeHour || '21:00',
                                   daysOff: d.daysOff || [],
-                                  village: d.village || ''
+                                  village: d.village || '',
+                                  displayOrder: d.displayOrder ? String(d.displayOrder) : '',
+                                  hidden: d.hidden || false,
+                                  showOnHome: d.showOnHome !== false,
+                                  showInSearch: d.showInSearch !== false
                                 });
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
@@ -2922,13 +3016,16 @@ export default function AdminPanel({
                     </div>
                   </div>
 
-                  {/* --- NEW DISTINCTION & WORK HOURS FIELDS --- */}
-                  <div className="border-t border-slate-200 pt-4 mt-4 space-y-4">
-                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">نظام التميز والتثبيت والتوثيق والخدمات للصيدلية</h4>
+                  {/* --- إدارة التميز والظهور --- */}
+                  <div className="border-t-2 border-dashed border-emerald-200 pt-5 mt-5 space-y-4 bg-emerald-50/20 p-4 rounded-xl border border-emerald-100 animate-fadeIn">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="p-1.5 bg-emerald-500 text-white rounded-lg"><Settings className="h-4 w-4" /></span>
+                      <h4 className="font-extrabold text-sm text-emerald-800">إدارة التميز والظهور للصيدلية</h4>
+                    </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {/* Featured (مميز) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={pharmForm.isFeatured} 
@@ -2937,12 +3034,12 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">⭐ تمييز الصيدلية (مميز)</span>
-                          <span className="text-[10px] text-slate-500">إضافة شارة وإطار ذهبي مضيء</span>
+                          <span className="text-[10px] text-slate-500 block">إضافة شارة وإطار ذهبي مضيء</span>
                         </div>
                       </label>
 
                       {/* Verified (موثق) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={pharmForm.isVerified} 
@@ -2951,12 +3048,12 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">✅ توثيق الصيدلية (موثق)</span>
-                          <span className="text-[10px] text-slate-500">إضافة علامة التوثيق الخضراء</span>
+                          <span className="text-[10px] text-slate-500 block">إضافة علامة التوثيق الخضراء</span>
                         </div>
                       </label>
 
                       {/* Pinned (مثبت) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={pharmForm.isPinned} 
@@ -2965,20 +3062,64 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">📌 تثبيت الصيدلية في الأعلى</span>
-                          <span className="text-[10px] text-slate-500">للظهور في مقدمة التصنيف والبحث</span>
+                          <span className="text-[10px] text-slate-500 block">للظهور في مقدمة التصنيف</span>
                         </div>
                       </label>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Hide / Show Toggle */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={pharmForm.hidden} 
+                          onChange={e => setPharmForm({...pharmForm, hidden: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">👁️ إخفاء الصيدلية (مخفي)</span>
+                          <span className="text-[10px] text-slate-500 block">إخفاء مؤقت دون الحذف</span>
+                        </div>
+                      </label>
+
+                      {/* Show on Homepage */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={pharmForm.showOnHome} 
+                          onChange={e => setPharmForm({...pharmForm, showOnHome: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">🏠 عرض بالصفحة الرئيسية</span>
+                          <span className="text-[10px] text-slate-500 block">تفعيل الظهور في الصفحة الرئيسية</span>
+                        </div>
+                      </label>
+
+                      {/* Show in Search Results */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={pharmForm.showInSearch} 
+                          onChange={e => setPharmForm({...pharmForm, showInSearch: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">🔍 يظهر في نتائج البحث</span>
+                          <span className="text-[10px] text-slate-500 block">تفعيل الظهور في نتائج البحث والتصنيفات</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                       {/* Pin Duration */}
                       {pharmForm.isPinned && (
                         <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
                           <select 
                             value={pharmForm.pinDuration} 
                             onChange={e => setPharmForm({...pharmForm, pinDuration: e.target.value as any})}
-                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                           >
                             <option value="7">7 أيام (أسبوع)</option>
                             <option value="30">30 يوماً (شهر)</option>
@@ -2990,41 +3131,54 @@ export default function AdminPanel({
 
                       {/* Package tier */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
                         <select 
                           value={pharmForm.packageTier} 
                           onChange={e => setPharmForm({...pharmForm, packageTier: e.target.value as any})}
-                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                         >
                           <option value="normal">عادي (Normal)</option>
-                          <option value="silver">فضي (Silver)</option>
-                          <option value="gold">ذهبي (Gold)</option>
-                          <option value="diamond">ماسي (Diamond)</option>
+                          <option value="silver">🥈 فضي (Silver)</option>
+                          <option value="gold">🥇 ذهبي (Gold)</option>
+                          <option value="diamond">💎 ماسي (Diamond)</option>
                         </select>
                       </div>
 
-                      {/* Village/Area */}
+                      {/* Manual Sort Order */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">الترتيب اليدوي للظهور</label>
+                        <input 
+                          type="number" 
+                          value={pharmForm.displayOrder} 
+                          onChange={e => setPharmForm({...pharmForm, displayOrder: e.target.value})}
+                          placeholder="ترتيب رقمي تصاعدي"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left font-bold"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      {/* Village/Area */}
+                      <div className={pharmForm.isPinned ? "" : "sm:col-span-2"}>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
                         <input 
                           type="text" 
                           value={pharmForm.village} 
                           onChange={e => setPharmForm({...pharmForm, village: e.target.value})}
-                          placeholder="مثال: مدينة الوقف، المراشدة، القلمينا"
-                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          placeholder="مدينة الوقف، المراشدة..."
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                         />
                       </div>
                     </div>
 
                     {/* Services Provided */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">الخدمات والأدوية المتوفرة (افصل بينها بفاصلة أو حرف "،")</label>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">الخدمات والأدوية المتوفرة (افصل بينها بفاصلة أو حرف "،")</label>
                       <textarea 
                         value={pharmForm.servicesProvided} 
                         onChange={e => setPharmForm({...pharmForm, servicesProvided: e.target.value})}
                         placeholder="مثال: تركيبات دوائية، توصيل منازل، قياس ضغط وسكر، صرف روشتات التأمين"
                         rows={2}
-                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none font-bold text-slate-700"
                       />
                     </div>
                   </div>
@@ -3174,7 +3328,11 @@ export default function AdminPanel({
                                   openHour: p.openHour || '09:00',
                                   closeHour: p.closeHour || '21:00',
                                   daysOff: p.daysOff || [],
-                                  village: p.village || ''
+                                  village: p.village || '',
+                                  displayOrder: p.displayOrder ? String(p.displayOrder) : '',
+                                  hidden: p.hidden || false,
+                                  showOnHome: p.showOnHome !== false,
+                                  showInSearch: p.showInSearch !== false
                                 });
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
@@ -3262,13 +3420,16 @@ export default function AdminPanel({
                     </div>
                   </div>
 
-                  {/* --- NEW DISTINCTION & WORK HOURS FIELDS --- */}
-                  <div className="border-t border-slate-200 pt-4 mt-4 space-y-4">
-                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">نظام التميز والتثبيت والتوثيق والخدمات للمعمل</h4>
+                  {/* --- إدارة التميز والظهور --- */}
+                  <div className="border-t-2 border-dashed border-emerald-200 pt-5 mt-5 space-y-4 bg-emerald-50/20 p-4 rounded-xl border border-emerald-100 animate-fadeIn">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="p-1.5 bg-emerald-500 text-white rounded-lg"><Settings className="h-4 w-4" /></span>
+                      <h4 className="font-extrabold text-sm text-emerald-800">إدارة التميز والظهور للمعمل</h4>
+                    </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {/* Featured (مميز) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={labForm.isFeatured} 
@@ -3277,12 +3438,12 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">⭐ تمييز المعمل (مميز)</span>
-                          <span className="text-[10px] text-slate-500">إضافة شارة وإطار ذهبي مضيء</span>
+                          <span className="text-[10px] text-slate-500 block">إضافة شارة وإطار ذهبي مضيء</span>
                         </div>
                       </label>
 
                       {/* Verified (موثق) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={labForm.isVerified} 
@@ -3291,12 +3452,12 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">✅ توثيق المعمل (موثق)</span>
-                          <span className="text-[10px] text-slate-500">إضافة علامة التوثيق الخضراء</span>
+                          <span className="text-[10px] text-slate-500 block">إضافة علامة التوثيق الخضراء</span>
                         </div>
                       </label>
 
                       {/* Pinned (مثبت) */}
-                      <label className="flex items-center gap-2 bg-white border rounded-lg p-3 cursor-pointer hover:bg-slate-50">
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
                         <input 
                           type="checkbox" 
                           checked={labForm.isPinned} 
@@ -3305,20 +3466,64 @@ export default function AdminPanel({
                         />
                         <div className="text-right">
                           <span className="block text-xs font-bold text-slate-800">📌 تثبيت المعمل في الأعلى</span>
-                          <span className="text-[10px] text-slate-500">للظهور في مقدمة التصنيف والبحث</span>
+                          <span className="text-[10px] text-slate-500 block">للظهور في مقدمة التصنيف</span>
                         </div>
                       </label>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Hide / Show Toggle */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={labForm.hidden} 
+                          onChange={e => setLabForm({...labForm, hidden: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">👁️ إخفاء المعمل (مخفي)</span>
+                          <span className="text-[10px] text-slate-500 block">إخفاء مؤقت دون الحذف</span>
+                        </div>
+                      </label>
+
+                      {/* Show on Homepage */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={labForm.showOnHome} 
+                          onChange={e => setLabForm({...labForm, showOnHome: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">🏠 عرض بالصفحة الرئيسية</span>
+                          <span className="text-[10px] text-slate-500 block">تفعيل الظهور في الصفحة الرئيسية</span>
+                        </div>
+                      </label>
+
+                      {/* Show in Search Results */}
+                      <label className="flex items-center gap-2.5 bg-white border rounded-xl p-3 cursor-pointer hover:bg-emerald-50/40 transition-colors shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={labForm.showInSearch} 
+                          onChange={e => setLabForm({...labForm, showInSearch: e.target.checked})}
+                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+                        />
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-slate-800">🔍 يظهر في نتائج البحث</span>
+                          <span className="text-[10px] text-slate-500 block">تفعيل الظهور في نتائج البحث والتصنيفات</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                       {/* Pin Duration */}
                       {labForm.isPinned && (
                         <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">مدة التثبيت في الأعلى</label>
                           <select 
                             value={labForm.pinDuration} 
                             onChange={e => setLabForm({...labForm, pinDuration: e.target.value as any})}
-                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                           >
                             <option value="7">7 أيام (أسبوع)</option>
                             <option value="30">30 يوماً (شهر)</option>
@@ -3330,41 +3535,54 @@ export default function AdminPanel({
 
                       {/* Package tier */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">باقة الاشتراك والترتيب</label>
                         <select 
                           value={labForm.packageTier} 
                           onChange={e => setLabForm({...labForm, packageTier: e.target.value as any})}
-                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                         >
                           <option value="normal">عادي (Normal)</option>
-                          <option value="silver">فضي (Silver)</option>
-                          <option value="gold">ذهبي (Gold)</option>
-                          <option value="diamond">ماسي (Diamond)</option>
+                          <option value="silver">🥈 فضي (Silver)</option>
+                          <option value="gold">🥇 ذهبي (Gold)</option>
+                          <option value="diamond">💎 ماسي (Diamond)</option>
                         </select>
                       </div>
 
-                      {/* Village/Area */}
+                      {/* Manual Sort Order */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">الترتيب اليدوي للظهور</label>
+                        <input 
+                          type="number" 
+                          value={labForm.displayOrder} 
+                          onChange={e => setLabForm({...labForm, displayOrder: e.target.value})}
+                          placeholder="ترتيب رقمي تصاعدي"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-left font-bold"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      {/* Village/Area */}
+                      <div className={labForm.isPinned ? "" : "sm:col-span-2"}>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">القرية أو المنطقة بالوقف</label>
                         <input 
                           type="text" 
                           value={labForm.village} 
                           onChange={e => setLabForm({...labForm, village: e.target.value})}
-                          placeholder="مثال: مدينة الوقف، المراشدة، القلمينا"
-                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          placeholder="مدينة الوقف، المراشدة..."
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-700"
                         />
                       </div>
                     </div>
 
                     {/* Services Provided */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">الخدمات والتحاليل المتوفرة (افصل بينها بفاصلة أو حرف "،")</label>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">الخدمات والتحاليل المتوفرة (افصل بينها بفاصلة أو حرف "،")</label>
                       <textarea 
                         value={labForm.servicesProvided} 
                         onChange={e => setLabForm({...labForm, servicesProvided: e.target.value})}
                         placeholder="مثال: تحليل وظائف كبد، رسم قلب، تحليل سكر صائم وفاطر، تحاليل هرمونات"
                         rows={2}
-                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none font-bold text-slate-700"
                       />
                     </div>
                   </div>
@@ -3514,7 +3732,11 @@ export default function AdminPanel({
                                   openHour: l.openHour || '09:00',
                                   closeHour: l.closeHour || '21:00',
                                   daysOff: l.daysOff || [],
-                                  village: l.village || ''
+                                  village: l.village || '',
+                                  displayOrder: l.displayOrder ? String(l.displayOrder) : '',
+                                  hidden: l.hidden || false,
+                                  showOnHome: l.showOnHome !== false,
+                                  showInSearch: l.showInSearch !== false
                                 });
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
