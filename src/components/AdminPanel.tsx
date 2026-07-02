@@ -464,99 +464,83 @@ export default function AdminPanel({
       };
       const currentTypeLabel = typeLabels[serviceType] || 'خدمة طبية';
 
-      // If transition to 'published' and not already published, add listing to the respective collection
-      if (newStatus === 'published' && req.status !== 'published') {
-        let newId = '';
+      // If the admin is approving the request (setting status to 'accepted' or 'published')
+      const isApproving = (newStatus === 'accepted' || newStatus === 'published');
 
-        if (serviceType === 'doctor') {
-          newId = `doc-${Date.now()}`;
-          const newDoc: Doctor = {
-            id: newId,
-            name: req.name,
-            specialty: req.specialty || 'تخصص عام',
-            clinicName: req.clinicName || 'عيادة خاصة',
-            address: req.address,
-            phone: req.phone,
-            whatsapp: req.phone,
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'doctors', newId), newDoc);
-          onUpdateDoctors([newDoc, ...doctors]);
-          onAddLog('إضافة', 'doctor', `تم قبول ونشر بيانات الطبيب الجديد: ${req.name} من طلب الرقم: ${req.id}`);
-        } else if (serviceType === 'pharmacy') {
+      if (isApproving) {
+        let targetCollection = 'doctors';
+        let newId = '';
+        let typeLabel = 'طبيب';
+
+        if (serviceType === 'pharmacy') {
+          targetCollection = 'pharmacies';
           newId = `pharm-${Date.now()}`;
-          const displayName = req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : '');
-          const newPharm: Pharmacy = {
-            id: newId,
-            name: displayName,
-            address: req.address,
-            phone: req.phone,
-            whatsapp: req.phone,
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'pharmacies', newId), newPharm);
-          onUpdatePharmacies([newPharm, ...pharmacies]);
-          onAddLog('إضافة', 'pharmacy', `تم قبول ونشر الصيدلية الجديدة: ${req.name} من طلب الرقم: ${req.id}`);
+          typeLabel = 'صيدلية';
         } else if (serviceType === 'lab' || serviceType === 'scan_center') {
+          targetCollection = 'labs';
           newId = `lab-${Date.now()}`;
-          const suffix = serviceType === 'scan_center' ? ' (مركز أشعة)' : '';
-          const newLab: Lab = {
-            id: newId,
-            name: req.name + suffix,
-            address: req.address,
-            phone: req.phone,
-            whatsapp: req.phone,
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'labs', newId), newLab);
-          onUpdateLabs([newLab, ...labs]);
-          onAddLog('إضافة', 'lab', `تم قبول ونشر ${currentTypeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
-        } else if (serviceType === 'hospital') {
-          newId = `doc-${Date.now()}`;
-          const newDoc: Doctor = {
-            id: newId,
-            name: req.name,
-            specialty: 'مستشفى / مركز طبي',
-            clinicName: 'قسم الاستقبال والطوارئ',
-            address: req.address,
-            phone: req.phone,
-            whatsapp: req.phone,
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'doctors', newId), newDoc);
-          onUpdateDoctors([newDoc, ...doctors]);
-          onAddLog('إضافة', 'doctor', `تم قبول ونشر مستشفى جديد: ${req.name} من طلب الرقم: ${req.id}`);
-        } else if (serviceType === 'physiotherapy') {
-          newId = `doc-${Date.now()}`;
-          const newDoc: Doctor = {
-            id: newId,
-            name: req.name,
-            specialty: 'علاج طبيعي وتأهيل',
-            clinicName: 'مركز علاج طبيعي',
-            address: req.address,
-            phone: req.phone,
-            whatsapp: req.phone,
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'doctors', newId), newDoc);
-          onUpdateDoctors([newDoc, ...doctors]);
-          onAddLog('إضافة', 'doctor', `تم قبول ونشر مركز علاج طبيعي: ${req.name} من طلب الرقم: ${req.id}`);
+          typeLabel = serviceType === 'scan_center' ? 'مركز أشعة' : 'معمل تحاليل';
         } else {
+          targetCollection = 'doctors';
           newId = `doc-${Date.now()}`;
-          const newDoc: Doctor = {
-            id: newId,
-            name: req.name,
-            specialty: req.shortDescription || 'خدمة طبية أخرى',
-            clinicName: 'خدمات طبية عامة',
-            address: req.address,
-            phone: req.phone,
-            whatsapp: req.phone,
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'doctors', newId), newDoc);
-          onUpdateDoctors([newDoc, ...doctors]);
-          onAddLog('إضافة', 'doctor', `تم قبول ونشر خدمة طبية أخرى: ${req.name} من طلب الرقم: ${req.id}`);
+          if (serviceType === 'hospital') typeLabel = 'مستشفى';
+          else if (serviceType === 'physiotherapy') typeLabel = 'مركز علاج طبيعي';
+          else if (serviceType === 'doctor') typeLabel = 'طبيب';
+          else typeLabel = 'خدمة طبية أخرى';
         }
+
+        // Prepare specialty and clinicName defaults based on type if not present
+        let specialty = req.specialty || '';
+        let clinicName = req.clinicName || '';
+
+        if (serviceType === 'hospital') {
+          specialty = 'مستشفى / مركز طبي';
+          clinicName = 'قسم الاستقبال والطوارئ';
+        } else if (serviceType === 'physiotherapy') {
+          specialty = 'علاج طبيعي وتأهيل';
+          clinicName = 'مركز علاج طبيعي';
+        } else if (serviceType === 'other') {
+          specialty = req.shortDescription || 'خدمة طبية أخرى';
+          clinicName = 'خدمات طبية عامة';
+        } else if (serviceType === 'doctor' && !specialty) {
+          specialty = 'تخصص عام';
+          clinicName = 'عيادة خاصة';
+        }
+
+        const displayName = serviceType === 'pharmacy' 
+          ? (req.name + (req.pharmacistName ? ` (د. ${req.pharmacistName})` : ''))
+          : (serviceType === 'scan_center' ? (req.name + ' (مركز أشعة)') : req.name);
+
+        // Copy ALL data of the request and set approved, visible, status
+        const targetDocPayload: any = {
+          ...req, // copies all properties (e.g. name, phone, address, whatsapp, governorate, center, notes, etc.)
+          id: newId,
+          name: displayName,
+          specialty,
+          clinicName,
+          approved: true,
+          visible: true,
+          status: 'published',
+          hidden: false,
+          createdAt: new Date().toISOString()
+        };
+
+        // Save in Firestore target collection
+        await setDoc(doc(db, targetCollection, newId), targetDocPayload);
+
+        // Update corresponding state array so it shows up in UI immediately
+        if (targetCollection === 'doctors') {
+          onUpdateDoctors([targetDocPayload as Doctor, ...doctors]);
+        } else if (targetCollection === 'pharmacies') {
+          onUpdatePharmacies([targetDocPayload as Pharmacy, ...pharmacies]);
+        } else if (targetCollection === 'labs') {
+          onUpdateLabs([targetDocPayload as Lab, ...labs]);
+        }
+
+        onAddLog('إضافة', serviceType as any, `تم قبول ونشر ${typeLabel} الجديد: ${req.name} من طلب الرقم: ${req.id}`);
+
+        // Force request status to become 'published' (تم النشر) as required
+        newStatus = 'published';
       }
 
       const historyEntry = {
