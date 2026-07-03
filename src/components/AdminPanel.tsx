@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { 
   ShieldCheck, Lock, LogOut, Plus, Edit2, Trash2, Download, Upload, 
   Activity, CheckCircle2, AlertTriangle, Settings, RefreshCw, FileText, Check, PlusCircle,
-  Clock, XCircle, Search, Save, ClipboardList, Eye, EyeOff
+  Clock, XCircle, Search, Save, ClipboardList, Eye, EyeOff, Sparkles
 } from 'lucide-react';
 import { Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest, ContactMessage } from '../data/initialData';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -359,6 +359,357 @@ function RequestStatusCard({
   );
 }
 
+interface DistinctionItemCardProps {
+  key?: React.Key;
+  item: Doctor | Pharmacy | Lab;
+  type: 'doctor' | 'pharmacy' | 'lab';
+  onUpdateDoctors: (docs: Doctor[]) => void;
+  onUpdatePharmacies: (pharms: Pharmacy[]) => void;
+  onUpdateLabs: (labs: Lab[]) => void;
+  doctors: Doctor[];
+  pharmacies: Pharmacy[];
+  labs: Lab[];
+  onAddLog: (action: string, type: 'doctor' | 'pharmacy' | 'lab' | 'specialty' | 'ad' | 'system' | 'backup', details: string) => void;
+  onShowToast: (msg: string) => void;
+}
+
+function DistinctionItemCard({
+  item, type, onUpdateDoctors, onUpdatePharmacies, onUpdateLabs, doctors, pharmacies, labs, onAddLog, onShowToast
+}: DistinctionItemCardProps) {
+  const [isFeatured, setIsFeatured] = useState(!!item.isFeatured);
+  const [isVerified, setIsVerified] = useState(!!item.isVerified);
+  const [isPinned, setIsPinned] = useState(!!item.isPinned);
+  const [packageTier, setPackageTier] = useState<any>(item.packageTier || 'normal');
+  const [displayOrder, setDisplayOrder] = useState<string>(item.displayOrder !== undefined && item.displayOrder !== null ? String(item.displayOrder) : '');
+  const [hidden, setHidden] = useState(!!item.hidden);
+  const [showOnHome, setShowOnHome] = useState(item.showOnHome !== false);
+  const [showInSearch, setShowInSearch] = useState(item.showInSearch !== false);
+  const [servicesProvided, setServicesProvided] = useState(
+    item.servicesProvided ? item.servicesProvided.join('، ') : ''
+  );
+  const [startDay, setStartDay] = useState(item.startDay || 'السبت');
+  const [endDay, setEndDay] = useState(item.endDay || 'الخميس');
+  const [openHour, setOpenHour] = useState(item.openHour || '09:00');
+  const [closeHour, setCloseHour] = useState(item.closeHour || '21:00');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const servicesArray = servicesProvided
+        ? servicesProvided.split(/,|،/).map(s => s.trim()).filter(Boolean)
+        : [];
+      
+      const numDisplayOrder = displayOrder !== '' ? Number(displayOrder) : undefined;
+
+      const updatedFields = {
+        isFeatured,
+        isVerified,
+        isPinned,
+        packageTier,
+        displayOrder: numDisplayOrder,
+        hidden,
+        showOnHome,
+        showInSearch,
+        servicesProvided: servicesArray,
+        startDay,
+        endDay,
+        openHour,
+        closeHour,
+        lastUpdated: new Date().toISOString()
+      };
+
+      if (type === 'doctor') {
+        const docToUpdate = doctors.find(d => d.id === item.id);
+        if (docToUpdate) {
+          const updatedDoc = { ...docToUpdate, ...updatedFields };
+          await setDoc(doc(db, 'doctors', item.id), updatedDoc);
+          onUpdateDoctors(doctors.map(d => d.id === item.id ? updatedDoc : d));
+        }
+      } else if (type === 'pharmacy') {
+        const pharmToUpdate = pharmacies.find(p => p.id === item.id);
+        if (pharmToUpdate) {
+          const updatedPharm = { ...pharmToUpdate, ...updatedFields };
+          await setDoc(doc(db, 'pharmacies', item.id), updatedPharm);
+          onUpdatePharmacies(pharmacies.map(p => p.id === item.id ? updatedPharm : p));
+        }
+      } else if (type === 'lab') {
+        const labToUpdate = labs.find(l => l.id === item.id);
+        if (labToUpdate) {
+          const updatedLab = { ...labToUpdate, ...updatedFields };
+          await setDoc(doc(db, 'labs', item.id), updatedLab);
+          onUpdateLabs(labs.map(l => l.id === item.id ? updatedLab : l));
+        }
+      }
+
+      onAddLog('تعديل', type, `تعديل التميز والظهور للجهة: ${item.name}`);
+      onShowToast(`✔️ تم حفظ تعديلات التميز والظهور بنجاح لـ ${item.name}`);
+    } catch (error: any) {
+      console.error("Error saving distinction fields:", error);
+      alert(`❌ فشل حفظ التعديلات في قاعدة البيانات: ${error.message || error}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const getPackageBadgeColor = (tier: string) => {
+    switch (tier) {
+      case 'diamond': return 'bg-cyan-100 text-cyan-800 border-cyan-200';
+      case 'gold': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case 'silver': return 'bg-slate-100 text-slate-800 border-slate-200';
+      default: return 'bg-gray-150 text-gray-700 border-gray-250';
+    }
+  };
+
+  const getPackageTierLabel = (tier: string) => {
+    switch (tier) {
+      case 'diamond': return '💎 ماسي';
+      case 'gold': return '🥇 ذهبي';
+      case 'silver': return '🥈 فضي';
+      default: return 'عادي';
+    }
+  };
+
+  return (
+    <div className={`p-5 rounded-2xl border transition-all shadow-sm bg-white hover:shadow-md ${
+      hidden ? 'border-red-200 bg-red-50/5' : 
+      isPinned ? 'border-amber-300 bg-amber-50/10' : 'border-slate-150'
+    }`}>
+      {/* Header Info */}
+      <div className="flex flex-wrap justify-between items-start gap-3 border-b border-slate-100 pb-3 mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-slate-900 text-base">{item.name}</h3>
+            {type === 'doctor' && (
+              <span className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-bold">
+                🩺 {(item as Doctor).specialty}
+              </span>
+            )}
+            {type === 'pharmacy' && (
+              <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full font-bold">
+                💊 صيدلية
+              </span>
+            )}
+            {type === 'lab' && (
+              <span className="text-xs bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full font-bold">
+                🧪 معمل تحاليل
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 font-semibold mt-1">📌 {item.address} {item.village ? `• ${item.village}` : ''}</p>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs">
+          {isFeatured && <span className="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-lg border border-amber-200">⭐ مميز</span>}
+          {isVerified && <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-lg border border-emerald-200">✅ موثق</span>}
+          {isPinned && <span className="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-lg border border-blue-200">📌 مثبت</span>}
+          <span className={`font-bold px-2 py-0.5 rounded-lg border ${getPackageBadgeColor(packageTier)}`}>
+            {getPackageTierLabel(packageTier)}
+          </span>
+        </div>
+      </div>
+
+      {/* Grid of Controls */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs font-semibold text-slate-700">
+        
+        {/* ⭐ مميز */}
+        <label className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-150 rounded-xl cursor-pointer transition-all">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">⭐</span>
+            <span className="font-bold text-slate-800">مميز (شارة وإطار ذهبي)</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={isFeatured} 
+            onChange={e => setIsFeatured(e.target.checked)}
+            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+          />
+        </label>
+
+        {/* ✅ موثق */}
+        <label className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-150 rounded-xl cursor-pointer transition-all">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-emerald-500">✅</span>
+            <span className="font-bold text-slate-800">موثق (علامة خضراء)</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={isVerified} 
+            onChange={e => setIsVerified(e.target.checked)}
+            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+          />
+        </label>
+
+        {/* 📌 تثبيت في الأعلى */}
+        <label className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-150 rounded-xl cursor-pointer transition-all">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-blue-500">📌</span>
+            <span className="font-bold text-slate-800">تثبيت في الأعلى</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={isPinned} 
+            onChange={e => setIsPinned(e.target.checked)}
+            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+          />
+        </label>
+
+        {/* إخفاء / إظهار */}
+        <label className={`flex items-center justify-between p-2.5 border rounded-xl cursor-pointer transition-all ${
+          hidden ? 'bg-red-50 hover:bg-red-100/50 border-red-200' : 'bg-slate-50 hover:bg-slate-100/70 border-slate-150'
+        }`}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{hidden ? '👁️‍🗨️' : '👁️'}</span>
+            <span className="font-bold text-slate-800">{hidden ? 'مخفي حالياً' : 'مستمر بالظهور'}</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={hidden} 
+            onChange={e => setHidden(e.target.checked)}
+            className="h-4 w-4 text-red-600 focus:ring-red-500 border-slate-300 rounded"
+          />
+        </label>
+
+        {/* عرض في الصفحة الرئيسية */}
+        <label className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-150 rounded-xl cursor-pointer transition-all">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-indigo-500">🏠</span>
+            <span className="font-bold text-slate-800">عرض بالصفحة الرئيسية</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={showOnHome} 
+            onChange={e => setShowOnHome(e.target.checked)}
+            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+          />
+        </label>
+
+        {/* الظهور في نتائج البحث */}
+        <label className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-150 rounded-xl cursor-pointer transition-all">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-amber-500">🔍</span>
+            <span className="font-bold text-slate-800">يظهر في نتائج البحث</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={showInSearch} 
+            onChange={e => setShowInSearch(e.target.checked)}
+            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded"
+          />
+        </label>
+
+        {/* اختيار الباقة */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[10.5px] font-bold text-slate-500">باقة الاشتراك والترتيب</label>
+          <select 
+            value={packageTier} 
+            onChange={e => setPackageTier(e.target.value)}
+            className="bg-white border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:ring-1 focus:ring-emerald-500"
+          >
+            <option value="normal">عادي (Normal)</option>
+            <option value="silver">🥈 فضي (Silver)</option>
+            <option value="gold">🥇 ذهبي (Gold)</option>
+            <option value="diamond">💎 ماسي (Diamond)</option>
+          </select>
+        </div>
+
+        {/* ترتيب الظهور */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[10.5px] font-bold text-slate-500">الترتيب اليدوي للظهور</label>
+          <input 
+            type="number" 
+            value={displayOrder} 
+            onChange={e => setDisplayOrder(e.target.value)}
+            placeholder="مثال: 1, 2, 3..."
+            className="bg-white border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:ring-1 focus:ring-emerald-500 font-mono text-left"
+            dir="ltr"
+          />
+        </div>
+
+        {/* مواعيد العمل */}
+        <div className="flex flex-col gap-1 sm:col-span-1">
+          <label className="text-[10.5px] font-bold text-slate-500">مواعيد العمل (الأيام)</label>
+          <div className="flex gap-1 items-center">
+            <select 
+              value={startDay} 
+              onChange={e => setStartDay(e.target.value)}
+              className="bg-white border border-slate-150 rounded-xl px-1.5 py-2.5 text-[11px] font-bold text-slate-700 w-1/2 text-center"
+            >
+              <option value="السبت">السبت</option>
+              <option value="الأحد">الأحد</option>
+              <option value="الإثنين">الإثنين</option>
+              <option value="الثلاثاء">الثلاثاء</option>
+              <option value="الأربعاء">الأربعاء</option>
+              <option value="الخميس">الخميس</option>
+              <option value="الجمعة">الجمعة</option>
+            </select>
+            <span className="text-slate-400">إلى</span>
+            <select 
+              value={endDay} 
+              onChange={e => setEndDay(e.target.value)}
+              className="bg-white border border-slate-150 rounded-xl px-1.5 py-2.5 text-[11px] font-bold text-slate-700 w-1/2 text-center"
+            >
+              <option value="السبت">السبت</option>
+              <option value="الأحد">الأحد</option>
+              <option value="الإثنين">الإثنين</option>
+              <option value="الثلاثاء">الثلاثاء</option>
+              <option value="الأربعاء">الأربعاء</option>
+              <option value="الخميس">الخميس</option>
+              <option value="الجمعة">الجمعة</option>
+            </select>
+          </div>
+        </div>
+
+        {/* الساعات */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[10.5px] font-bold text-slate-500">مواعيد العمل (الساعات)</label>
+          <div className="flex gap-1 items-center">
+            <input 
+              type="text" 
+              value={openHour} 
+              onChange={e => setOpenHour(e.target.value)}
+              placeholder="09:00"
+              className="bg-white border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 text-center w-1/2 font-mono"
+            />
+            <span className="text-slate-400">إلى</span>
+            <input 
+              type="text" 
+              value={closeHour} 
+              onChange={e => setCloseHour(e.target.value)}
+              placeholder="21:00"
+              className="bg-white border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 text-center w-1/2 font-mono"
+            />
+          </div>
+        </div>
+
+        {/* تعديل الخدمات */}
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <label className="text-[10.5px] font-bold text-slate-500">تعديل الخدمات (افصل بينها بفاصلة أو حرف "،")</label>
+          <textarea 
+            value={servicesProvided} 
+            onChange={e => setServicesProvided(e.target.value)}
+            placeholder="مثال: كشف باطني، رسم قلب، سونار..."
+            rows={1}
+            className="bg-white border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:ring-1 focus:ring-emerald-500 resize-none h-[42px]"
+          />
+        </div>
+
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end mt-4 border-t border-slate-100 pt-3">
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-xl shadow-sm hover:shadow transition-all disabled:opacity-50 text-xs"
+        >
+          <Save className="h-4 w-4" />
+          <span>{isSaving ? 'جاري الحفظ والرفع...' : 'حفظ التعديلات'}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface AdminPanelProps {
   adminLoggedIn: boolean;
   onLogin: (pass: string) => boolean;
@@ -393,7 +744,7 @@ export default function AdminPanel({
 }: AdminPanelProps) {
   
   const [passcode, setPasscode] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'stats' | 'requests' | 'contact' | 'doctors' | 'pharmacies' | 'labs' | 'specialties' | 'ads' | 'settings' | 'logs'>('stats');
+  const [activeSubTab, setActiveSubTab] = useState<'stats' | 'requests' | 'contact' | 'doctors' | 'pharmacies' | 'labs' | 'specialties' | 'ads' | 'settings' | 'logs' | 'distinction'>('stats');
   
   // Entity Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -502,6 +853,10 @@ export default function AdminPanel({
   // File upload ref for database restoration
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  // Distinction View States
+  const [distinctionType, setDistinctionType] = useState<'doctor' | 'pharmacy' | 'lab'>('doctor');
+  const [distinctionSearch, setDistinctionSearch] = useState('');
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1565,6 +1920,7 @@ export default function AdminPanel({
     { id: 'doctors', label: 'الأطباء', icon: FileText },
     { id: 'pharmacies', label: 'الصيدليات', icon: FileText },
     { id: 'labs', label: 'المعامل', icon: FileText },
+    { id: 'distinction', label: 'إدارة التميز والظهور', icon: Sparkles },
     { id: 'specialties', label: 'إدارة التخصصات', icon: Settings },
     { id: 'ads', label: 'المساحات الإعلانية', icon: Settings },
     { id: 'settings', label: 'النسخ والإعدادات', icon: RefreshCw },
@@ -3757,6 +4113,128 @@ export default function AdminPanel({
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: DISTINCTION & VISIBILITY MANAGEMENT */}
+          {activeSubTab === 'distinction' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="border-b pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <Sparkles className="h-6 w-6 text-amber-500" />
+                    <span>إدارة التميز والظهور للجهات</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 font-semibold mt-1">
+                    تحكم كامل في إشارات التميز، باقات الاشتراك، ترتيب الظهور، التوثيق، والتثبيت في الصفحة الرئيسية لجميع الجهات.
+                  </p>
+                </div>
+              </div>
+
+              {/* Sub-filters (pills for entity type) */}
+              <div className="bg-slate-50 border border-slate-150 p-2 rounded-2xl flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setDistinctionType('doctor');
+                    setDistinctionSearch('');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    distinctionType === 'doctor'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-55 hover:text-emerald-600'
+                  }`}
+                >
+                  <span>🩺 الأطباء والعيادات</span>
+                  <span className="bg-white/20 text-[10px] px-2 py-0.5 rounded-full font-black">
+                    {doctors.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    setDistinctionType('pharmacy');
+                    setDistinctionSearch('');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    distinctionType === 'pharmacy'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-55 hover:text-blue-600'
+                  }`}
+                >
+                  <span>💊 الصيدليات</span>
+                  <span className="bg-white/20 text-[10px] px-2 py-0.5 rounded-full font-black">
+                    {pharmacies.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    setDistinctionType('lab');
+                    setDistinctionSearch('');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    distinctionType === 'lab'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-55 hover:text-purple-600'
+                  }`}
+                >
+                  <span>🧪 المعامل والمختبرات</span>
+                  <span className="bg-white/20 text-[10px] px-2 py-0.5 rounded-full font-black">
+                    {labs.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 h-4.5 w-4.5" />
+                <input
+                  type="text"
+                  value={distinctionSearch}
+                  onChange={e => setDistinctionSearch(e.target.value)}
+                  placeholder="ابحث بالاسم أو العنوان للتعديل السريع..."
+                  className="w-full bg-white border border-slate-150 rounded-2xl pr-10 pl-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm"
+                />
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-4">
+                {(() => {
+                  let list: any[] = [];
+                  if (distinctionType === 'doctor') list = doctors;
+                  else if (distinctionType === 'pharmacy') list = pharmacies;
+                  else if (distinctionType === 'lab') list = labs;
+
+                  const filtered = list.filter(item => {
+                    const q = distinctionSearch.toLowerCase().trim();
+                    return !q || item.name.toLowerCase().includes(q) || (item.address && item.address.toLowerCase().includes(q));
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="bg-white rounded-2xl border border-slate-150 p-12 text-center shadow-sm">
+                        <span className="text-4xl block mb-3">🔍</span>
+                        <h4 className="font-bold text-slate-800 text-sm">لم يتم العثور على أي نتائج</h4>
+                        <p className="text-xs text-slate-400 mt-1">تأكد من كتابة الاسم بشكل صحيح أو تصفح الأقسام الأخرى.</p>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map(item => (
+                    <DistinctionItemCard
+                      key={item.id}
+                      item={item}
+                      type={distinctionType}
+                      doctors={doctors}
+                      pharmacies={pharmacies}
+                      labs={labs}
+                      onUpdateDoctors={onUpdateDoctors}
+                      onUpdatePharmacies={onUpdatePharmacies}
+                      onUpdateLabs={onUpdateLabs}
+                      onAddLog={onAddLog}
+                      onShowToast={onShowToast}
+                    />
+                  ));
+                })()}
               </div>
             </div>
           )}
