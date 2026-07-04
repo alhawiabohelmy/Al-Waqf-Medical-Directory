@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import * as LucideIcons from 'lucide-react';
 import { 
   Search, Stethoscope, Pill, FlaskConical, ArrowUpRight, CheckCircle2, 
   HelpCircle, Send, HeartPulse, ShieldAlert, ChevronLeft, Volume2, Info, MessageSquare,
   ClipboardList, UserPlus, PlusCircle, Check, Clock, AlertCircle, XCircle, ArrowLeft, X,
-  ShieldCheck, FileText, PhoneCall, FileSearch, AlertTriangle, Archive, Save, SlidersHorizontal
+  ShieldCheck, FileText, PhoneCall, FileSearch, AlertTriangle, Archive, Save, SlidersHorizontal,
+  WifiOff
 } from 'lucide-react';
 
 // Firebase Firestore
-import { collection, doc, setDoc, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 // Components
@@ -18,10 +20,12 @@ import ListingCard from './components/ListingCard';
 import AdminPanel from './components/AdminPanel';
 import AdRotator from './components/AdRotator';
 import { checkActivityStatus } from './lib/activityStatus';
+// @ts-ignore
+import logoImg from './assets/images/al_waqf_medical_logo_1783159654140.jpg';
 
 // Data / Types
 import { 
-  Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest, ContactMessage,
+  Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest, ContactMessage, AppNotification,
   INITIAL_DOCTORS, INITIAL_PHARMACIES, INITIAL_LABS, INITIAL_SPECIALTIES, 
   INITIAL_ADS, INITIAL_LOGS, INITIAL_HOME_CONFIG 
 } from './data/initialData';
@@ -198,7 +202,65 @@ export function sortListings<T extends {
 }
 
 export default function App() {
+  // --- PWA & OFFLINE & SPLASH STATES ---
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+      if (sessionStorage.getItem('waqf_install_dismissed') !== 'true') {
+        setShowInstallPrompt(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    const splashTimer = setTimeout(() => {
+      setShowSplash(false);
+    }, 1200);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      clearTimeout(splashTimer);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`PWA: Install choice outcome is: ${outcome}`);
+    setDeferredPrompt(null);
+    setShowInstallBtn(false);
+    setShowInstallPrompt(false);
+  };
+
+  const handleDismissInstall = () => {
+    sessionStorage.setItem('waqf_install_dismissed', 'true');
+    setShowInstallPrompt(false);
+  };
+
   // --- CORE SYSTEM STATES ---
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem('waqf_read_notifications');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [doctors, setDoctors] = useState<Doctor[]>(() => {
     const saved = localStorage.getItem('waqf_doctors');
     return saved ? JSON.parse(saved) : INITIAL_DOCTORS;
@@ -442,6 +504,70 @@ export default function App() {
     };
     fetchAllData();
   }, []);
+
+  // --- REALTIME NOTIFICATIONS SUBSCRIPTION ---
+  useEffect(() => {
+    const pathForOnSnapshot = 'notifications';
+    const unsub = onSnapshot(collection(db, pathForOnSnapshot), (snapshot) => {
+      const list: AppNotification[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as AppNotification);
+      });
+      
+      // Sort notifications (pinned first, then by priority, then by date)
+      list.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+
+        const priorityWeight = { high: 3, normal: 2, low: 1 };
+        const weightA = priorityWeight[a.priority] || 2;
+        const weightB = priorityWeight[b.priority] || 2;
+        if (weightA !== weightB) {
+          return weightB - weightA;
+        }
+
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+
+      setNotifications(list);
+    }, (error) => {
+      console.error("Error in notifications snapshot listener:", error);
+      handleFirestoreError(error, OperationType.GET, pathForOnSnapshot);
+    });
+
+    return () => unsub();
+  }, []);
+
+  const getActiveNotifications = () => {
+    const now = new Date();
+    return notifications.filter(n => {
+      if (!n.isActive) return false;
+      const start = n.startAt ? new Date(n.startAt) : null;
+      const end = n.endAt ? new Date(n.endAt) : null;
+      if (start && now < start) return false;
+      if (end && now > end) return false;
+      return true;
+    });
+  };
+
+  const markNotificationAsRead = (id: string) => {
+    setReadNotificationIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const updated = [...prev, id];
+      localStorage.setItem('waqf_read_notifications', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const markAllNotificationsAsRead = () => {
+    const active = getActiveNotifications();
+    const activeIds = active.map(n => n.id);
+    setReadNotificationIds((prev) => {
+      const merged = Array.from(new Set([...prev, ...activeIds]));
+      localStorage.setItem('waqf_read_notifications', JSON.stringify(merged));
+      return merged;
+    });
+  };
 
   // --- NAVIGATION & ROUTING ---
   const [activePage, setActivePage] = useState<string>('home');
@@ -921,6 +1047,57 @@ export default function App() {
 
   const themeClasses = getThemeColorClasses(config.themeColor);
 
+  // --- PWA INTERCEPTORS ---
+  if (showSplash) {
+    return (
+      <div className="fixed inset-0 bg-[#0F766E] flex flex-col items-center justify-center z-[9999] text-white" dir="rtl">
+        <div className="flex flex-col items-center max-w-md px-6 text-center">
+          <div className="bg-white p-2.5 rounded-[2.5rem] shadow-2xl mb-6 text-[#0F766E] flex items-center justify-center animate-pulse w-32 h-32 overflow-hidden border-2 border-teal-500/20">
+            <img src={logoImg} alt="شعار دليل الوقف الطبي" className="w-full h-full object-cover rounded-[2.2rem]" />
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-3 font-sans text-center">دليل الوقف الطبي</h1>
+          <p className="text-teal-100/95 text-sm sm:text-base font-semibold leading-relaxed max-w-xs mx-auto">
+            دليلك الأول للخدمات الطبية في مركز الوقف
+          </p>
+        </div>
+        <div className="absolute bottom-12 flex flex-col items-center gap-2.5">
+          <div className="h-1.5 w-32 bg-white/10 rounded-full overflow-hidden relative">
+            <div className="h-full bg-white rounded-full animate-loading-bar w-0"></div>
+          </div>
+          <span className="text-[10px] text-teal-200 font-bold tracking-wide">جاري تحميل الدليل...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOffline) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center" dir="rtl">
+        <div className="max-w-md w-full bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col items-center">
+          <div className="h-16 w-16 bg-rose-50 rounded-full flex items-center justify-center mb-6 text-rose-500 animate-bounce">
+            <WifiOff className="h-8 w-8" />
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 mb-3">لا يوجد اتصال بالإنترنت</h1>
+          <p className="text-slate-500 text-sm mb-6 leading-relaxed font-semibold">
+            يبدو أنك لست متصلاً بالإنترنت حالياً. دليل الوقف الطبي يحتاج للاتصال بالشبكة لعرض أحدث البيانات والصيدليات بدقة.
+          </p>
+          <button
+            onClick={() => {
+              if (navigator.onLine) {
+                setIsOffline(false);
+              } else {
+                window.location.reload();
+              }
+            }}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white font-black text-sm py-4 px-6 rounded-2xl transition-all shadow-md shadow-teal-600/10 active:scale-95 cursor-pointer"
+          >
+            إعادة المحاولة 🔄
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col ${getBackgroundClass()} selection:bg-slate-200 selection:text-slate-950`}>
       
@@ -931,17 +1108,31 @@ export default function App() {
         adminLoggedIn={adminLoggedIn} 
         onLogout={handleAdminLogout} 
         config={config}
+        showInstallBtn={showInstallBtn}
+        onInstallApp={handleInstallApp}
+        notifications={getActiveNotifications()}
+        readNotificationIds={readNotificationIds}
+        onMarkAsRead={markNotificationAsRead}
+        onMarkAllAsRead={markAllNotificationsAsRead}
       />
 
       {/* 3. MAIN SITE CONTENT AREA */}
-      <main className="flex-grow">
+      <main className="flex-grow overflow-x-hidden">
         {activePage !== 'home' && activePage !== 'admin' && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
             <AdRotator ads={ads} position="top" />
           </div>
         )}
-        
-        {/* === HOME PAGE (الرئيسية) === */}
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activePage}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="w-full h-full"
+          >
         {activePage === 'home' && (
           <div className="animate-fadeIn">
             {(config.sectionsOrder || ['ticker', 'top-ad', 'hero', 'search', 'services', 'middle-ad', 'stats', 'featured']).map((sectionId) => {
@@ -2767,6 +2958,7 @@ export default function App() {
             onSaveConfig={handleSaveConfig}
             onUpdateDoctorRequests={handleUpdateDoctorRequests}
             onUpdateContactMessages={handleUpdateContactMessages}
+            notifications={notifications}
             onAddLog={addLog}
             onShowToast={showToast}
           />
@@ -2777,6 +2969,8 @@ export default function App() {
             <AdRotator ads={ads} position="bottom" />
           </div>
         )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* 4. WEBSITE FOOTER */}
@@ -2872,6 +3066,40 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* PWA FLOATING INSTALLATION PROMPT */}
+      {showInstallPrompt && (
+        <div className="fixed bottom-24 sm:bottom-6 left-6 right-6 sm:left-auto sm:right-6 sm:max-w-sm bg-white border border-slate-100 p-5 rounded-2xl shadow-2xl z-[9998] animate-slideUp" dir="rtl">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-amber-50 rounded-xl text-amber-500 shrink-0">
+              <HeartPulse className="h-6 w-6 animate-pulse" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-black text-slate-900 mb-1">تثبيت تطبيق دليل الوقف</h4>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                تصفح الدليل الطبي ومواقع الأطباء والصيدليات بشكل أسرع ومباشرة من شاشتك الرئيسية!
+              </p>
+            </div>
+            <button onClick={handleDismissInstall} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 mt-4">
+            <button
+              onClick={handleInstallApp}
+              className="flex-1 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white text-xs font-black py-2.5 px-4 rounded-xl transition-all shadow-sm shadow-teal-600/10 cursor-pointer text-center"
+            >
+              تثبيت الآن 📱
+            </button>
+            <button
+              onClick={handleDismissInstall}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold py-2.5 px-4 rounded-xl transition-all cursor-pointer text-center"
+            >
+              ليس الآن
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 5. FLOATING SELF-CONTAINED TOAST NOTIFICATIONS */}
       {toastMessage && (

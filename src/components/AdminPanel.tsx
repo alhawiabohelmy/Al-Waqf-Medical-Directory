@@ -2,9 +2,9 @@ import React, { useState, useRef } from 'react';
 import { 
   ShieldCheck, Lock, LogOut, Plus, Edit2, Trash2, Download, Upload, 
   Activity, CheckCircle2, AlertTriangle, Settings, RefreshCw, FileText, Check, PlusCircle,
-  Clock, XCircle, Search, Save, ClipboardList, Eye, EyeOff, Sparkles
+  Clock, XCircle, Search, Save, ClipboardList, Eye, EyeOff, Sparkles, Bell, Megaphone, ShieldAlert, Calendar, Pin
 } from 'lucide-react';
-import { Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest, ContactMessage } from '../data/initialData';
+import { Doctor, Pharmacy, Lab, Ad, ActivityLog, HomePageConfig, DoctorRequest, ContactMessage, AppNotification, NotificationType, NotificationPriority } from '../data/initialData';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -723,6 +723,7 @@ interface AdminPanelProps {
   config: HomePageConfig;
   doctorRequests: DoctorRequest[];
   contactMessages: ContactMessage[];
+  notifications?: AppNotification[];
   onUpdateDoctors: (docs: Doctor[]) => void;
   onUpdatePharmacies: (pharms: Pharmacy[]) => void;
   onUpdateLabs: (labs: Lab[]) => void;
@@ -738,13 +739,13 @@ interface AdminPanelProps {
 
 export default function AdminPanel({
   adminLoggedIn, onLogin, onLogout,
-  doctors, pharmacies, labs, specialties, ads, logs, config, doctorRequests, contactMessages,
+  doctors, pharmacies, labs, specialties, ads, logs, config, doctorRequests, contactMessages, notifications = [],
   onUpdateDoctors, onUpdatePharmacies, onUpdateLabs, onUpdateSpecialties, onUpdateAds, onUpdateConfig, onSaveConfig,
   onUpdateDoctorRequests, onUpdateContactMessages, onAddLog, onShowToast
 }: AdminPanelProps) {
   
   const [passcode, setPasscode] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'stats' | 'requests' | 'contact' | 'doctors' | 'pharmacies' | 'labs' | 'specialties' | 'ads' | 'settings' | 'logs' | 'distinction'>('stats');
+  const [activeSubTab, setActiveSubTab] = useState<'stats' | 'requests' | 'contact' | 'doctors' | 'pharmacies' | 'labs' | 'specialties' | 'ads' | 'settings' | 'logs' | 'distinction' | 'notifications'>('stats');
   
   // Entity Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1798,6 +1799,104 @@ export default function AdminPanel({
     }
   };
 
+  // --- NOTIFICATIONS ACTIONS ---
+  const [notificationForm, setNotificationForm] = useState({
+    title: '',
+    content: '',
+    type: 'general' as NotificationType,
+    priority: 'normal' as NotificationPriority,
+    isPinned: false,
+    isActive: true,
+    startDate: '',
+    endDate: ''
+  });
+
+  const resetNotificationForm = () => {
+    setNotificationForm({
+      title: '',
+      content: '',
+      type: 'general',
+      priority: 'normal',
+      isPinned: false,
+      isActive: true,
+      startDate: '',
+      endDate: ''
+    });
+  };
+
+  const saveNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notificationForm.title || !notificationForm.content) {
+      onShowToast('⚠️ يرجى تعبئة عنوان ومحتوى الإشعار.');
+      return;
+    }
+
+    try {
+      const notifId = editingId && editingId !== 'new' ? editingId : `notification-${Date.now()}`;
+      const notifData: AppNotification = {
+        id: notifId,
+        title: notificationForm.title,
+        content: notificationForm.content,
+        type: notificationForm.type,
+        priority: notificationForm.priority,
+        isPinned: notificationForm.isPinned,
+        isActive: notificationForm.isActive,
+        startAt: notificationForm.startDate || '',
+        endAt: notificationForm.endDate || '',
+        createdAt: editingId && editingId !== 'new' 
+          ? (notifications.find(n => n.id === editingId)?.createdAt || new Date().toISOString())
+          : new Date().toISOString()
+      };
+
+      console.log(`Firebase: Saving notification ${notifId}...`);
+      await setDoc(doc(db, 'notifications', notifId), notifData);
+      console.log(`Firebase: Notification saved successfully.`);
+
+      onAddLog(editingId && editingId !== 'new' ? 'تعديل' : 'إضافة', 'system', `تم ${editingId && editingId !== 'new' ? 'تعديل' : 'إضافة'} الإشعار: ${notifData.title}`);
+      onShowToast(editingId && editingId !== 'new' ? '✅ تم تحديث بيانات الإشعار بنجاح.' : '✅ تمت إضافة الإشعار بنجاح.');
+      
+      setEditingId(null);
+      resetNotificationForm();
+    } catch (error: any) {
+      console.error("Firebase Error saving notification:", error);
+      alert(`❌ فشل حفظ الإشعار في قاعدة البيانات: ${error.message || error}`);
+    }
+  };
+
+  const toggleNotificationStatus = async (id: string, currentStatus: boolean, title: string) => {
+    const notifToUpdate = notifications.find(n => n.id === id);
+    if (!notifToUpdate) return;
+
+    try {
+      console.log(`Firebase: Toggling status of notification ${id} to ${!currentStatus}...`);
+      const updatedNotif = { ...notifToUpdate, isActive: !currentStatus };
+      await setDoc(doc(db, 'notifications', id), updatedNotif);
+      console.log(`Firebase: Notification ${id} status updated successfully.`);
+
+      onAddLog('تعديل', 'system', `تم ${!currentStatus ? 'تفعيل' : 'تعطيل'} الإشعار: ${title}`);
+      onShowToast(`📢 تم ${!currentStatus ? 'تفعيل' : 'تعطيل'} الإشعار بنجاح.`);
+    } catch (error: any) {
+      console.error("Firebase Error toggling notification status:", error);
+      alert(`❌ فشل تعديل حالة الإشعار في قاعدة البيانات: ${error.message || error}`);
+    }
+  };
+
+  const deleteNotification = async (id: string, title: string) => {
+    if (window.confirm(`هل أنت متأكد من حذف هذا الإشعار نهائياً: "${title}"؟`)) {
+      try {
+        console.log(`Firebase: Deleting notification ${id}...`);
+        await deleteDoc(doc(db, 'notifications', id));
+        console.log(`Firebase: Notification ${id} deleted successfully.`);
+
+        onAddLog('حذف', 'system', `تم حذف الإشعار: ${title}`);
+        onShowToast('🗑️ تم حذف الإشعار بنجاح.');
+      } catch (error: any) {
+        console.error("Firebase Error deleting notification:", error);
+        alert(`❌ فشل حذف الإشعار من قاعدة البيانات: ${error.message || error}`);
+      }
+    }
+  };
+
   // --- BACKUP & RESTORE DATABASE ---
   const handleExportData = () => {
     const databaseDump = {
@@ -1957,6 +2056,7 @@ export default function AdminPanel({
     { id: 'distinction', label: 'إدارة التميز والظهور', icon: Sparkles },
     { id: 'specialties', label: 'إدارة التخصصات', icon: Settings },
     { id: 'ads', label: 'المساحات الإعلانية', icon: Settings },
+    { id: 'notifications', label: 'إدارة الإشعارات', icon: Bell },
     { id: 'settings', label: 'النسخ والإعدادات', icon: RefreshCw },
     { id: 'logs', label: 'سجل العمليات', icon: Activity },
   ];
@@ -4561,6 +4661,260 @@ export default function AdminPanel({
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: NOTIFICATIONS */}
+          {activeSubTab === 'notifications' && (
+            <div className="space-y-6 animate-fadeIn text-right" dir="rtl">
+              <div className="flex justify-between items-center border-b pb-2">
+                <h2 className="text-xl font-bold text-slate-900">نظام الإشعارات والتنبيهات والتعميمات الطبية المباشرة</h2>
+                {!editingId && (
+                  <button 
+                    onClick={() => {
+                      setEditingId('new');
+                      resetNotificationForm();
+                    }}
+                    className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-3.5 py-2.5 rounded-xl cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>إضافة إشعار جديد</span>
+                  </button>
+                )}
+              </div>
+
+              {editingId && (
+                <form onSubmit={saveNotification} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                  <h3 className="font-bold text-slate-800">{editingId === 'new' ? 'إضافة إشعار جديد' : 'تحديث بيانات الإشعار'}</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2 text-right">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">عنوان الإشعار *</label>
+                      <input 
+                        type="text"
+                        required 
+                        value={notificationForm.title} 
+                        onChange={e => setNotificationForm({...notificationForm, title: e.target.value})}
+                        placeholder="أدخل عنواناً واضحاً وموجزاً..."
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-emerald-500 text-right"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2 text-right">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">محتوى ونص الإشعار بالتفصيل *</label>
+                      <textarea 
+                        required 
+                        rows={4}
+                        value={notificationForm.content} 
+                        onChange={e => setNotificationForm({...notificationForm, content: e.target.value})}
+                        placeholder="أدخل محتوى الإشعار بالتفصيل..."
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-emerald-500 text-right"
+                      />
+                    </div>
+
+                    <div className="text-right">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">نوع الإشعار</label>
+                      <select
+                        value={notificationForm.type}
+                        onChange={e => setNotificationForm({...notificationForm, type: e.target.value as NotificationType})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-emerald-500 text-right"
+                      >
+                        <option value="general">عام / توجيهي</option>
+                        <option value="alert">تنبيه / تحذير هام</option>
+                        <option value="update">تحديث في الخدمات</option>
+                        <option value="promo">إعلان ممول / ترويجي</option>
+                        <option value="maintenance">صيانة مجدولة</option>
+                      </select>
+                    </div>
+
+                    <div className="text-right">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">درجة الأهمية والأولوية</label>
+                      <select
+                        value={notificationForm.priority}
+                        onChange={e => setNotificationForm({...notificationForm, priority: e.target.value as NotificationPriority})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-emerald-500 text-right"
+                      >
+                        <option value="normal">طبيعية</option>
+                        <option value="high">مرتفعة (يظهر بتمييز بصري للمستخدمين)</option>
+                      </select>
+                    </div>
+
+                    <div className="text-right">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">تاريخ بدء النشر والظهور (اختياري)</label>
+                      <input 
+                        type="date"
+                        value={notificationForm.startDate} 
+                        onChange={e => setNotificationForm({...notificationForm, startDate: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-emerald-500 text-right"
+                      />
+                    </div>
+
+                    <div className="text-right">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">تاريخ انتهاء النشر التلقائي (اختياري)</label>
+                      <input 
+                        type="date"
+                        value={notificationForm.endDate} 
+                        onChange={e => setNotificationForm({...notificationForm, endDate: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-emerald-500 text-right"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-6 py-2 sm:col-span-2 text-right">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 select-none">
+                        <input 
+                          type="checkbox"
+                          checked={notificationForm.isPinned}
+                          onChange={e => setNotificationForm({...notificationForm, isPinned: e.target.checked})}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="flex items-center gap-1">
+                          <Pin className="h-3.5 w-3.5 text-amber-500" />
+                          تثبيت الإشعار في أعلى القائمة
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 select-none">
+                        <input 
+                          type="checkbox"
+                          checked={notificationForm.isActive}
+                          onChange={e => setNotificationForm({...notificationForm, isActive: e.target.checked})}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>تفعيل الإشعار فوراً للمستخدمين</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-4 border-t border-slate-200 justify-start">
+                    <button 
+                      type="submit"
+                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm shadow-sm cursor-pointer"
+                    >
+                      حفظ الإشعار
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setEditingId(null);
+                        resetNotificationForm();
+                      }}
+                      className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-sm cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Notifications Table */}
+              <div className="bg-white rounded-2xl border border-slate-150 overflow-hidden text-right">
+                <table className="w-full text-right text-xs sm:text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold">
+                    <tr>
+                      <th className="px-4 py-3 text-right">الإشعار والنوع</th>
+                      <th className="px-4 py-3 text-right">المحتوى</th>
+                      <th className="px-4 py-3 text-right hidden sm:table-cell">التثبيت / الأولوية</th>
+                      <th className="px-4 py-3 text-right hidden md:table-cell">تاريخ النشر</th>
+                      <th className="px-4 py-3 text-right">حالة الإشعار</th>
+                      <th className="px-4 py-3 text-center">العمليات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {notifications.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-10 text-slate-400 font-bold">
+                          لا توجد إشعارات مسجلة بقاعدة البيانات حالياً.
+                        </td>
+                      </tr>
+                    ) : (
+                      notifications.map((n) => {
+                        const typeLabels: Record<string, string> = {
+                          general: 'عام',
+                          alert: 'تنبيه هام',
+                          update: 'تحديث خدمات',
+                          promo: 'إعلان ممول',
+                          maintenance: 'صيانة مجدولة'
+                        };
+                        return (
+                          <tr key={n.id} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-4 text-right">
+                              <div className="font-extrabold text-slate-900 mb-1">{n.title}</div>
+                              <span className="inline-block text-[10px] bg-teal-50 text-[#0F766E] border border-teal-100 px-1.5 py-0.5 rounded font-black">
+                                {typeLabels[n.type] || n.type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-right max-w-xs break-words">
+                              <div className="text-slate-500 text-xs line-clamp-2">{n.content}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right hidden sm:table-cell">
+                              <div className="flex flex-wrap gap-1.5">
+                                {n.isPinned && (
+                                  <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-150 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
+                                    <Pin className="h-3 w-3" /> مثبّت
+                                  </span>
+                                )}
+                                {n.priority === 'high' && (
+                                  <span className="text-[10px] bg-rose-50 text-rose-600 border border-rose-150 px-1.5 py-0.5 rounded font-bold">
+                                    هام جداً
+                                  </span>
+                                )}
+                                {!n.isPinned && n.priority !== 'high' && (
+                                  <span className="text-slate-400 text-xs">اعتيادي</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-right hidden md:table-cell text-xs text-slate-500 font-semibold">
+                              <div>من: {n.startAt || 'فوري'}</div>
+                              <div>إلى: {n.endAt || 'دائم'}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <button
+                                onClick={() => toggleNotificationStatus(n.id, n.isActive, n.title)}
+                                className={`text-[10px] font-black px-2 py-1 rounded-full cursor-pointer border ${
+                                  n.isActive 
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                                }`}
+                              >
+                                {n.isActive ? '● نشط للمستخدمين' : '○ متوقف حالياً'}
+                              </button>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <div className="flex justify-center gap-1">
+                                <button 
+                                  onClick={() => {
+                                    setEditingId(n.id);
+                                    setNotificationForm({
+                                      title: n.title,
+                                      content: n.content,
+                                      type: n.type,
+                                      priority: n.priority,
+                                      isPinned: n.isPinned,
+                                      isActive: n.isActive,
+                                      startDate: n.startAt,
+                                      endDate: n.endAt
+                                    });
+                                  }}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+                                  title="تعديل"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </button>
+                                <button 
+                                  onClick={() => deleteNotification(n.id, n.title)}
+                                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                                  title="حذف"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>

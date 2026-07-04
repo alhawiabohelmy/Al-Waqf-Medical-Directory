@@ -35,5 +35,10 @@ service cloud.firestore {
     match /contactMessages/{messageId} {
       allow read, write: if true;
     }
+
+    // 8. Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
   }
 }

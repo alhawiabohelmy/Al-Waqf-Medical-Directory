@@ -159,6 +159,22 @@ export interface HomePageConfig {
   adminPassword?: string;
 }
 
+export type NotificationType = 'general' | 'alert' | 'update' | 'promo' | 'maintenance';
+export type NotificationPriority = 'high' | 'normal' | 'low';
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  content: string;
+  type: NotificationType;
+  isActive: boolean;
+  isPinned: boolean;
+  priority: NotificationPriority;
+  startAt: string; // ISO String
+  endAt: string; // ISO String
+  createdAt: string; // ISO String
+}
+
 export interface RequestHistory {
   timestamp: string;
   status: string;

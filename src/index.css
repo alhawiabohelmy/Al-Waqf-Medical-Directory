@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+@keyframes loadingProgress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.animate-loading-bar {
+  animation: loadingProgress 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Native App UX Improvements */
+html, body {
+  overscroll-behavior-y: none; /* Disables elastic refresh on mobile browsers */
+  -webkit-tap-highlight-color: transparent; /* Removes blue gray flash on tap */
+  scroll-behavior: smooth;
+}
+
+/* Custom modern thin scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
