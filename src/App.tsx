@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import * as LucideIcons from 'lucide-react';
 import { 
   Search, Stethoscope, Pill, FlaskConical, ArrowUpRight, CheckCircle2, 
-  HelpCircle, Send, HeartPulse, ShieldAlert, ChevronLeft, Volume2, Info, MessageSquare,
+  HelpCircle, Send, HeartPulse, ShieldAlert, ChevronLeft, ChevronDown, Volume2, Info, MessageSquare,
   ClipboardList, UserPlus, PlusCircle, Check, Clock, AlertCircle, XCircle, ArrowLeft, X,
   ShieldCheck, FileText, PhoneCall, FileSearch, AlertTriangle, Archive, Save, SlidersHorizontal,
   WifiOff
@@ -570,7 +570,57 @@ export default function App() {
   };
 
   // --- NAVIGATION & ROUTING ---
-  const [activePage, setActivePage] = useState<string>('home');
+  const [activePage, _setActivePage] = useState<string>('home');
+  const setActivePage = (page: string) => {
+    if (page === 'doctors' || page === 'pharmacies' || page === 'labs') {
+      _setActivePage('home');
+      setTimeout(() => {
+        const el = document.getElementById(`section-${page}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    } else {
+      _setActivePage(page);
+      if (page === 'home') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  };
+
+  // Infinite Scroll event handler
+  useEffect(() => {
+    const handleScroll = () => {
+      // For doctors sentinel
+      const docSentinel = document.getElementById('doctors-sentinel');
+      if (docSentinel) {
+        const rect = docSentinel.getBoundingClientRect();
+        if (rect.top <= window.innerHeight + 150) {
+          setVisibleDoctors(prev => prev + 6);
+        }
+      }
+      // For pharmacies sentinel
+      const pharmSentinel = document.getElementById('pharmacies-sentinel');
+      if (pharmSentinel) {
+        const rect = pharmSentinel.getBoundingClientRect();
+        if (rect.top <= window.innerHeight + 150) {
+          setVisiblePharmacies(prev => prev + 6);
+        }
+      }
+      // For labs sentinel
+      const labSentinel = document.getElementById('labs-sentinel');
+      if (labSentinel) {
+        const rect = labSentinel.getBoundingClientRect();
+        if (rect.top <= window.innerHeight + 150) {
+          setVisibleLabs(prev => prev + 6);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const [adminLoggedIn, setAdminLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('waqf_admin_session') === 'true';
   });
@@ -631,6 +681,24 @@ export default function App() {
   const [distinctionFilter, setDistinctionFilter] = useState('all'); // 'all' | 'featured' | 'verified'
   const [servicesSearch, setServicesSearch] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // --- LAZY LOADING / INFINITE SCROLL LIMITS FOR HOME PAGE ---
+  const [visibleDoctors, setVisibleDoctors] = useState(6);
+  const [visiblePharmacies, setVisiblePharmacies] = useState(6);
+  const [visibleLabs, setVisibleLabs] = useState(6);
+
+  // Reset limits when filters change
+  useEffect(() => {
+    setVisibleDoctors(6);
+  }, [doctorSearch, selectedSpecialty, doctorSort, villageFilter, availableNowFilter, distinctionFilter, servicesSearch]);
+
+  useEffect(() => {
+    setVisiblePharmacies(6);
+  }, [pharmSearch, pharmSort, villageFilter, availableNowFilter, distinctionFilter, servicesSearch]);
+
+  useEffect(() => {
+    setVisibleLabs(6);
+  }, [labSearch, labSort, villageFilter, availableNowFilter, distinctionFilter, servicesSearch]);
 
   // Unified Search state
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
@@ -1320,6 +1388,557 @@ export default function App() {
                   return null;
               }
             })}
+
+            {/* === دليل الوقف الطبي الشامل: الأقسام مسرودة بالتتالي === */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
+              
+              {/* === قسم الأطباء والعيادات === */}
+              <div id="section-doctors" className="scroll-mt-24">
+                <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="text-2xl sm:text-3xl font-black text-slate-950 flex items-center gap-2.5">
+                      <span className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                        <Stethoscope className="h-6 w-6" />
+                      </span>
+                      <span>الأطباء والعيادات</span>
+                    </h2>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-1 font-semibold">
+                      تصفح الأطباء والعيادات حسب التخصص، أو استخدم البحث السريع للوصول الفوري للطبيب المطلوب.
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 text-blue-700 text-xs font-black px-4 py-2 rounded-xl border border-blue-100 shrink-0 self-start md:self-center">
+                    {doctors.filter(d => !d.hidden).length} عيادة مسجلة
+                  </div>
+                </div>
+
+                {/* Search and Filters block */}
+                <div className="bg-white rounded-2xl border border-slate-150 p-4 sm:p-6 mb-8 shadow-sm flex flex-col md:flex-row items-stretch gap-4">
+                  
+                  {/* Text search */}
+                  <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 gap-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all duration-200">
+                    <Search className="h-5 w-5 text-slate-400 shrink-0" />
+                    <input 
+                      type="text"
+                      value={doctorSearch}
+                      onChange={(e) => setDoctorSearch(e.target.value)}
+                      placeholder="ابحث باسم الطبيب، أو العيادة، أو العنوان..."
+                      className="w-full bg-transparent py-3 text-sm text-slate-800 font-semibold focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Specialty filter */}
+                  <div className="md:w-64">
+                    <select
+                      value={selectedSpecialty}
+                      onChange={(e) => setSelectedSpecialty(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200"
+                    >
+                      <option value="">جميع التخصصات الطبية</option>
+                      {specialties.map((spec, index) => (
+                        <option key={index} value={spec}>{spec}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Sort filter */}
+                  <div className="md:w-48">
+                    <select
+                      value={doctorSort}
+                      onChange={(e) => setDoctorSort(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200"
+                    >
+                      <option value="smart">الترتيب الذكي (الافتراضي)</option>
+                      <option value="recent">الأحدث تسجيلاً</option>
+                      <option value="name-asc">الاسم (أ إلى ي)</option>
+                      <option value="name-desc">الاسم (ي إلى أ)</option>
+                    </select>
+                  </div>
+
+                  {/* Toggle Advanced Filters Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                    className={`flex items-center gap-2 justify-center px-4 py-3.5 text-sm font-bold rounded-xl border transition-all duration-200 shrink-0 ${
+                      showAdvancedFilters || villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch
+                        ? 'bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-100'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <SlidersHorizontal className="h-4 w-4" />
+                    <span>خيارات بحث متقدم</span>
+                    {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                      <span className="bg-blue-600 text-white rounded-full w-2 h-2" />
+                    )}
+                  </button>
+
+                  {/* Clear Filters Button */}
+                  {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                    <button 
+                      onClick={() => {
+                        setVillageFilter('');
+                        setAvailableNowFilter(false);
+                        setDistinctionFilter('all');
+                        setServicesSearch('');
+                      }}
+                      className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 py-2 px-3 rounded-xl transition-colors flex items-center gap-1.5 justify-center"
+                    >
+                      <Clock className="h-3.5 w-3.5 rotate-180" />
+                      <span>إعادة تعيين</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Advanced Filters Panel */}
+                {showAdvancedFilters && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-8 animate-fadeIn grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* 1. Village/Area Select */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">تصفية حسب القرية / المنطقة</label>
+                      <select
+                        value={villageFilter}
+                        onChange={(e) => setVillageFilter(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="">جميع قرى الوقف</option>
+                        {['مدينة الوقف', 'المراشدة', 'القلمينا', 'دمو', 'العبل', 'بني كود', 'السنابسة'].map((v, i) => (
+                          <option key={i} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 2. Distinction Type */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">نوع التميز والتوثيق</label>
+                      <select
+                        value={distinctionFilter}
+                        onChange={(e) => setDistinctionFilter(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="all">الجميع (افتراضي)</option>
+                        <option value="featured">المتميزين فقط ⭐</option>
+                        <option value="verified">الموثقين فقط ✅</option>
+                      </select>
+                    </div>
+
+                    {/* 3. Services search */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">البحث بالخدمات الطبية</label>
+                      <input
+                        type="text"
+                        value={servicesSearch}
+                        onChange={(e) => setServicesSearch(e.target.value)}
+                        placeholder="سونار، كشف باطني، رسم قلب..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    {/* 4. Available Now toggle */}
+                    <div className="flex flex-col justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setAvailableNowFilter(!availableNowFilter)}
+                        className={`w-full flex items-center justify-between border rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          availableNowFilter
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800 ring-2 ring-emerald-100'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2.5 h-2.5 rounded-full ${availableNowFilter ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                          <span>المتاحون الآن فقط</span>
+                        </div>
+                        {availableNowFilter && <Check className="h-4 w-4 text-emerald-600" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Doctors List with Lazy Loading */}
+                {(() => {
+                  let filtered = doctors.filter(doc => !doc.hidden && doc.showInSearch !== false).filter(doc => {
+                    const query = doctorSearch.toLowerCase().trim();
+                    const matchQuery = !query || 
+                      doc.name.toLowerCase().includes(query) || 
+                      doc.clinicName.toLowerCase().includes(query) || 
+                      doc.address.toLowerCase().includes(query) || 
+                      doc.specialty.toLowerCase().includes(query);
+                    
+                    const matchSpecialty = !selectedSpecialty || doc.specialty === selectedSpecialty;
+                    const matchVillage = !villageFilter || 
+                      (doc.village && doc.village.includes(villageFilter)) ||
+                      (doc.address && doc.address.includes(villageFilter));
+                    
+                    let matchAvailable = true;
+                    if (availableNowFilter) {
+                      const status = checkActivityStatus(doc);
+                      matchAvailable = status.isOpen;
+                    }
+
+                    let matchDistinction = true;
+                    if (distinctionFilter === 'featured') {
+                      matchDistinction = !!doc.isFeatured;
+                    } else if (distinctionFilter === 'verified') {
+                      matchDistinction = !!doc.isVerified;
+                    }
+
+                    let matchServices = true;
+                    if (servicesSearch.trim()) {
+                      const sQuery = servicesSearch.toLowerCase().trim();
+                      matchServices = doc.servicesProvided ? 
+                        doc.servicesProvided.some(s => s.toLowerCase().includes(sQuery)) : false;
+                    }
+                    
+                    return matchQuery && matchSpecialty && matchVillage && matchAvailable && matchDistinction && matchServices;
+                  });
+
+                  filtered = sortListings(filtered, doctorSort);
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="bg-white rounded-2xl border border-slate-150 p-12 text-center text-slate-500 max-w-md mx-auto my-6">
+                        <ShieldAlert className="h-12 w-12 text-amber-500 mx-auto mb-4 animate-bounce" />
+                        <h3 className="font-bold text-slate-800 text-lg mb-1">عذراً، لم نجد نتائج مطابقة</h3>
+                        <p className="text-xs leading-relaxed font-semibold">تأكد من كتابة الاسم بشكل صحيح أو تصفح تخصص طبي آخر.</p>
+                      </div>
+                    );
+                  }
+
+                  const sliced = filtered.slice(0, visibleDoctors);
+                  const hasMore = filtered.length > visibleDoctors;
+
+                  return (
+                    <div className="space-y-6">
+                      <AdRotator ads={ads} position="before_doctors" />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {sliced.map((doc, idx) => (
+                          <div key={doc.id} className="contents">
+                            <ListingCard 
+                              item={doc} 
+                              type="doctor" 
+                              ads={ads} 
+                              onShowToast={showToast} 
+                            />
+                            {idx === 2 && (
+                              <div className="md:col-span-2 lg:col-span-3 my-4">
+                                <AdRotator ads={ads} position="search_middle" />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div id="doctors-sentinel" className="h-1" />
+
+                      {hasMore && (
+                        <div className="text-center pt-4">
+                          <button
+                            onClick={() => setVisibleDoctors(prev => prev + 6)}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-sm rounded-xl transition-all shadow-xs cursor-pointer"
+                          >
+                            <span>تحميل المزيد من الأطباء</span>
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      <AdRotator ads={ads} position="after_doctors" />
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* === قسم الصيدليات المعتمدة === */}
+              <div id="section-pharmacies" className="scroll-mt-24">
+                <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="text-2xl sm:text-3xl font-black text-slate-950 flex items-center gap-2.5">
+                      <span className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                        <Pill className="h-6 w-6" />
+                      </span>
+                      <span>الصيدليات المعتمدة</span>
+                    </h2>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-1 font-semibold">
+                      تواصل مع الصيدليات بالوقف لطلب العلاج والاستشارات وخدمة التوصيل المنزلي المباشرة.
+                    </p>
+                  </div>
+                  <div className="bg-amber-50 text-amber-700 text-xs font-black px-4 py-2 rounded-xl border border-amber-100 shrink-0 self-start md:self-center">
+                    {pharmacies.filter(p => !p.hidden).length} صيدلية مسجلة
+                  </div>
+                </div>
+
+                {/* Search Block */}
+                <div className="bg-white rounded-2xl border border-slate-150 p-4 sm:p-6 mb-8 shadow-sm flex flex-col md:flex-row items-stretch gap-4">
+                  <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 gap-2.5 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-100 transition-all duration-200">
+                    <Search className="h-5 w-5 text-slate-400 shrink-0" />
+                    <input 
+                      type="text"
+                      value={pharmSearch}
+                      onChange={(e) => setPharmSearch(e.target.value)}
+                      placeholder="ابحث باسم الصيدلية، أو العنوان..."
+                      className="w-full bg-transparent py-3 text-sm text-slate-800 font-semibold focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="md:w-48">
+                    <select
+                      value={pharmSort}
+                      onChange={(e) => setPharmSort(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 transition-all duration-200"
+                    >
+                      <option value="smart">الترتيب الذكي (الافتراضي)</option>
+                      <option value="recent">الأحدث تسجيلاً</option>
+                      <option value="name-asc">الاسم (أ إلى ي)</option>
+                      <option value="name-desc">الاسم (ي إلى أ)</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                    className={`flex items-center gap-2 justify-center px-4 py-3.5 text-sm font-bold rounded-xl border transition-all duration-200 shrink-0 ${
+                      showAdvancedFilters || villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch
+                        ? 'bg-amber-50 text-amber-700 border-amber-200 ring-2 ring-amber-100'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <SlidersHorizontal className="h-4 w-4" />
+                    <span>خيارات بحث متقدم</span>
+                    {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                      <span className="bg-amber-600 text-white rounded-full w-2 h-2" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Pharmacies List with Lazy Loading */}
+                {(() => {
+                  let filtered = pharmacies.filter(ph => !ph.hidden && ph.showInSearch !== false).filter(ph => {
+                    const query = pharmSearch.toLowerCase().trim();
+                    const matchQuery = !query || ph.name.toLowerCase().includes(query) || ph.address.toLowerCase().includes(query);
+                    const matchVillage = !villageFilter || 
+                      (ph.village && ph.village.includes(villageFilter)) ||
+                      (ph.address && ph.address.includes(villageFilter));
+                    
+                    let matchAvailable = true;
+                    if (availableNowFilter) {
+                      const status = checkActivityStatus(ph);
+                      matchAvailable = status.isOpen;
+                    }
+
+                    let matchDistinction = true;
+                    if (distinctionFilter === 'featured') {
+                      matchDistinction = !!ph.isFeatured;
+                    } else if (distinctionFilter === 'verified') {
+                      matchDistinction = !!ph.isVerified;
+                    }
+
+                    let matchServices = true;
+                    if (servicesSearch.trim()) {
+                      const sQuery = servicesSearch.toLowerCase().trim();
+                      matchServices = ph.servicesProvided ? 
+                        ph.servicesProvided.some(s => s.toLowerCase().includes(sQuery)) : false;
+                    }
+
+                    return matchQuery && matchVillage && matchAvailable && matchDistinction && matchServices;
+                  });
+
+                  filtered = sortListings(filtered, pharmSort);
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="bg-white rounded-2xl border border-slate-150 p-12 text-center text-slate-500 max-w-md mx-auto my-6">
+                        <ShieldAlert className="h-12 w-12 text-amber-500 mx-auto mb-4 animate-bounce" />
+                        <h3 className="font-bold text-slate-800 text-lg mb-1">لم نجد نتائج مطابقة</h3>
+                        <p className="text-xs leading-relaxed font-semibold">جرب كتابة كلمات بحث أخرى مثل اسم الشارع أو صيدلية مختلفة.</p>
+                      </div>
+                    );
+                  }
+
+                  const sliced = filtered.slice(0, visiblePharmacies);
+                  const hasMore = filtered.length > visiblePharmacies;
+
+                  return (
+                    <div className="space-y-6">
+                      <AdRotator ads={ads} position="before_pharmacies" />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {sliced.map((pharm) => (
+                          <ListingCard 
+                            key={pharm.id}
+                            item={pharm} 
+                            type="pharmacy" 
+                            ads={ads} 
+                            onShowToast={showToast} 
+                          />
+                        ))}
+                      </div>
+
+                      <div id="pharmacies-sentinel" className="h-1" />
+
+                      {hasMore && (
+                        <div className="text-center pt-4">
+                          <button
+                            onClick={() => setVisiblePharmacies(prev => prev + 6)}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-amber-50 hover:bg-amber-100 text-amber-700 font-extrabold text-sm rounded-xl transition-all shadow-xs cursor-pointer"
+                          >
+                            <span>تحميل المزيد من الصيدليات</span>
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      <AdRotator ads={ads} position="after_pharmacies" />
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* === قسم المعامل والمراكز الطبية === */}
+              <div id="section-labs" className="scroll-mt-24">
+                <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="text-2xl sm:text-3xl font-black text-slate-950 flex items-center gap-2.5">
+                      <span className="p-2 bg-purple-50 text-purple-600 rounded-xl">
+                        <FlaskConical className="h-6 w-6" />
+                      </span>
+                      <span>المعامل والمراكز الطبية</span>
+                    </h2>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-1 font-semibold">
+                      ابحث عن المعمل الأقرب إليك، وتعرف على الفحوصات ومراكز الأشعة والتحاليل الدقيقة المتاحة.
+                    </p>
+                  </div>
+                  <div className="bg-purple-50 text-purple-700 text-xs font-black px-4 py-2 rounded-xl border border-purple-100 shrink-0 self-start md:self-center">
+                    {labs.filter(l => !l.hidden).length} معمل ومركز طبي مسجل
+                  </div>
+                </div>
+
+                {/* Search Block */}
+                <div className="bg-white rounded-2xl border border-slate-150 p-4 sm:p-6 mb-8 shadow-sm flex flex-col md:flex-row items-stretch gap-4">
+                  <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 gap-2.5 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-100 transition-all duration-200">
+                    <Search className="h-5 w-5 text-slate-400 shrink-0" />
+                    <input 
+                      type="text"
+                      value={labSearch}
+                      onChange={(e) => setLabSearch(e.target.value)}
+                      placeholder="ابحث باسم معمل التحاليل، أو العنوان..."
+                      className="w-full bg-transparent py-3 text-sm text-slate-800 font-semibold focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="md:w-48">
+                    <select
+                      value={labSort}
+                      onChange={(e) => setLabSort(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all duration-200"
+                    >
+                      <option value="smart">الترتيب الذكي (الافتراضي)</option>
+                      <option value="recent">الأحدث تسجيلاً</option>
+                      <option value="name-asc">الاسم (أ إلى ي)</option>
+                      <option value="name-desc">الاسم (ي إلى أ)</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                    className={`flex items-center gap-2 justify-center px-4 py-3.5 text-sm font-bold rounded-xl border transition-all duration-200 shrink-0 ${
+                      showAdvancedFilters || villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch
+                        ? 'bg-purple-50 text-purple-700 border-purple-200 ring-2 ring-purple-100'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <SlidersHorizontal className="h-4 w-4" />
+                    <span>خيارات بحث متقدم</span>
+                    {(villageFilter || availableNowFilter || distinctionFilter !== 'all' || servicesSearch) && (
+                      <span className="bg-purple-600 text-white rounded-full w-2 h-2" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Labs List with Lazy Loading */}
+                {(() => {
+                  let filtered = labs.filter(l => !l.hidden && l.showInSearch !== false).filter(l => {
+                    const query = labSearch.toLowerCase().trim();
+                    const matchQuery = !query || l.name.toLowerCase().includes(query) || l.address.toLowerCase().includes(query);
+                    const matchVillage = !villageFilter || 
+                      (l.village && l.village.includes(villageFilter)) ||
+                      (l.address && l.address.includes(villageFilter));
+                    
+                    let matchAvailable = true;
+                    if (availableNowFilter) {
+                      const status = checkActivityStatus(l);
+                      matchAvailable = status.isOpen;
+                    }
+
+                    let matchDistinction = true;
+                    if (distinctionFilter === 'featured') {
+                      matchDistinction = !!l.isFeatured;
+                    } else if (distinctionFilter === 'verified') {
+                      matchDistinction = !!l.isVerified;
+                    }
+
+                    let matchServices = true;
+                    if (servicesSearch.trim()) {
+                      const sQuery = servicesSearch.toLowerCase().trim();
+                      matchServices = l.servicesProvided ? 
+                        l.servicesProvided.some(s => s.toLowerCase().includes(sQuery)) : false;
+                    }
+
+                    return matchQuery && matchVillage && matchAvailable && matchDistinction && matchServices;
+                  });
+
+                  filtered = sortListings(filtered, labSort);
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="bg-white rounded-2xl border border-slate-150 p-12 text-center text-slate-500 max-w-md mx-auto my-6">
+                        <ShieldAlert className="h-12 w-12 text-amber-500 mx-auto mb-4 animate-bounce" />
+                        <h3 className="font-bold text-slate-800 text-lg mb-1">لم نجد نتائج مطابقة</h3>
+                        <p className="text-xs leading-relaxed font-semibold">جرب كتابة كلمات بحث أخرى مثل اسم الشارع أو معمل مختلف.</p>
+                      </div>
+                    );
+                  }
+
+                  const sliced = filtered.slice(0, visibleLabs);
+                  const hasMore = filtered.length > visibleLabs;
+
+                  return (
+                    <div className="space-y-6">
+                      <AdRotator ads={ads} position="before_labs" />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {sliced.map((lab) => (
+                          <ListingCard 
+                            key={lab.id}
+                            item={lab} 
+                            type="lab" 
+                            ads={ads} 
+                            onShowToast={showToast} 
+                          />
+                        ))}
+                      </div>
+
+                      <div id="labs-sentinel" className="h-1" />
+
+                      {hasMore && (
+                        <div className="text-center pt-4">
+                          <button
+                            onClick={() => setVisibleLabs(prev => prev + 6)}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold text-sm rounded-xl transition-all shadow-xs cursor-pointer"
+                          >
+                            <span>تحميل المزيد من المعامل</span>
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      <AdRotator ads={ads} position="after_labs" />
+                    </div>
+                  );
+                })()}
+              </div>
+
+            </div>
           </div>
         )}
 
