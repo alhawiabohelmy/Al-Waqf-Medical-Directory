@@ -822,7 +822,19 @@ export default function AdminPanel({
   const [newSpecialty, setNewSpecialty] = useState('');
   
   // Ad Form State
-  const [adForm, setAdForm] = useState({ title: '', content: '', link: '', position: 'ticker' as Ad['position'], isActive: true });
+  const [adForm, setAdForm] = useState({
+    title: '',
+    content: '',
+    link: '',
+    position: 'top' as Ad['position'],
+    displayOrder: 1,
+    duration: 5,
+    backgroundColor: '#059669',
+    textColor: '#ffffff',
+    isActive: true,
+    startDate: '',
+    endDate: ''
+  });
 
   // Doctor Addition Requests Management States
   const [requestSearch, setRequestSearch] = useState('');
@@ -1682,44 +1694,66 @@ export default function AdminPanel({
   };
 
   // --- ADS ACTIONS ---
+  const resetAdForm = () => {
+    setAdForm({
+      title: '',
+      content: '',
+      link: '',
+      position: 'top',
+      displayOrder: 1,
+      duration: 5,
+      backgroundColor: '#059669',
+      textColor: '#ffffff',
+      isActive: true,
+      startDate: '',
+      endDate: ''
+    });
+  };
+
   const saveAd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adForm.title || !adForm.content) {
-      onShowToast('⚠️ يرجى تعبئة عنوان ومحتوى الإعلان.');
+    if (!adForm.content) {
+      onShowToast('⚠️ يرجى تعبئة محتوى الإعلان.');
       return;
     }
 
     try {
+      const adData: Ad = {
+        id: editingId && editingId !== 'new' ? editingId : `ad-${Date.now()}`,
+        title: adForm.content.substring(0, 35),
+        content: adForm.content,
+        link: adForm.link || '#',
+        position: adForm.position,
+        displayOrder: Number(adForm.displayOrder) || 1,
+        duration: Number(adForm.duration) || 5,
+        backgroundColor: adForm.backgroundColor || '#059669',
+        textColor: adForm.textColor || '#ffffff',
+        isActive: adForm.isActive,
+        startDate: adForm.startDate || '',
+        endDate: adForm.endDate || ''
+      };
+
       if (editingId && editingId !== 'new') {
         console.log(`Firebase: Updating ad ${editingId}...`);
-        const updatedAd = {
-          ...adForm,
-          id: editingId
-        };
-        await setDoc(doc(db, 'ads', editingId), updatedAd);
+        await setDoc(doc(db, 'ads', editingId), adData);
         console.log(`Firebase: Ad ${editingId} updated successfully.`);
 
-        const updated = ads.map(a => a.id === editingId ? { ...a, ...adForm } : a);
+        const updated = ads.map(a => a.id === editingId ? adData : a);
         onUpdateAds(updated);
-        onAddLog('تعديل', 'ad', `تم تعديل الإعلان: ${adForm.title}`);
+        onAddLog('تعديل', 'ad', `تم تعديل الإعلان: ${adData.content.substring(0, 30)}`);
         onShowToast('✅ تم تحديث بيانات الإعلان بنجاح.');
         setEditingId(null);
-        setAdForm({ title: '', content: '', link: '', position: 'ticker', isActive: true });
+        resetAdForm();
       } else {
-        const newId = `ad-${Date.now()}`;
-        console.log(`Firebase: Creating new ad ${newId}...`);
-        const newAd: Ad = {
-          id: newId,
-          ...adForm
-        };
-        await setDoc(doc(db, 'ads', newId), newAd);
-        console.log(`Firebase: Ad ${newId} saved successfully.`);
+        console.log(`Firebase: Creating new ad ${adData.id}...`);
+        await setDoc(doc(db, 'ads', adData.id), adData);
+        console.log(`Firebase: Ad ${adData.id} saved successfully.`);
 
-        onUpdateAds([newAd, ...ads]);
-        onAddLog('إضافة', 'ad', `تم إدراج إعلان ترويجي جديد: ${adForm.title}`);
+        onUpdateAds([adData, ...ads]);
+        onAddLog('إضافة', 'ad', `تم إدراج إعلان ترويجي جديد: ${adData.content.substring(0, 30)}`);
         onShowToast('✅ تمت إضافة الإعلان بنجاح.');
         setEditingId(null);
-        setAdForm({ title: '', content: '', link: '', position: 'ticker', isActive: true });
+        resetAdForm();
       }
     } catch (error: any) {
       console.error("Firebase Error saving ad:", error);
@@ -4293,7 +4327,7 @@ export default function AdminPanel({
                   <button 
                     onClick={() => {
                       setEditingId('new');
-                      setAdForm({ title: '', content: '', link: '', position: 'ticker', isActive: true });
+                      resetAdForm();
                     }}
                     className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-3 py-2 rounded-lg"
                   >
@@ -4308,48 +4342,128 @@ export default function AdminPanel({
                   <h3 className="font-bold text-slate-800">{editingId === 'new' ? 'إضافة إعلان جديد' : 'تحديث محتوى الإعلان'}</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-600 mb-1">عنوان الإعلان الرئيسي *</label>
-                      <input 
-                        type="text" required value={adForm.title} 
-                        onChange={e => setAdForm({...adForm, title: e.target.value})}
-                        placeholder="مثال: خصم 20% على باقة التحاليل الشاملة"
-                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
                       <label className="block text-xs font-bold text-slate-600 mb-1">نص ومحتوى الإعلان بالتفصيل *</label>
                       <textarea 
                         required value={adForm.content} 
                         onChange={e => setAdForm({...adForm, content: e.target.value})}
                         rows={3}
-                        placeholder="اكتب تفاصيل الإعلان والخصومات وطرق التواصل هنا..."
+                        placeholder="اكتب نص ومحتوى الإعلان الترويجي هنا..."
                         className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">موضع ظهور الإعلان في الدليل *</label>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">موضع ظهور الإعلان *</label>
                       <select 
                         value={adForm.position} 
                         onChange={e => setAdForm({...adForm, position: e.target.value as any})}
                         className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-700"
                       >
-                        <option value="top">بانر أعلى الصفحة الرئيسية</option>
-                        <option value="bottom">بانر أسفل الصفحة الرئيسية</option>
-                        <option value="ticker">شريط الإعلانات المتحرك بالتناوب (Ticker)</option>
-                        <option value="search_middle">إعلان بين نتائج البحث</option>
-                        <option value="card_doctor">داخل صفحات/كروت الأطباء</option>
-                        <option value="card_pharmacy">داخل صفحات/كروت الصيدليات</option>
-                        <option value="card_lab">داخل صفحات/كروت المعامل</option>
+                        <option value="top">أعلى الصفحة</option>
+                        <option value="bottom">أسفل الصفحة</option>
+                        <option value="before_doctors">قبل قائمة الأطباء</option>
+                        <option value="after_doctors">بعد قائمة الأطباء</option>
+                        <option value="before_pharmacies">قبل الصيدليات</option>
+                        <option value="after_pharmacies">بعد الصيدليات</option>
+                        <option value="before_labs">قبل المعامل</option>
+                        <option value="after_labs">بعد المعامل</option>
+                        <option value="ticker">شريط الإعلانات المتحرك (Ticker)</option>
+                        <option value="search_middle">بين نتائج البحث</option>
+                        <option value="card_doctor">داخل كارت الطبيب</option>
+                        <option value="card_pharmacy">داخل كارت الصيدلية</option>
+                        <option value="card_lab">داخل كارت المعمل</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">رابط الإعلان الاختياري (أو اترك علامة #)</label>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">رابط الإعلان (اختياري)</label>
                       <input 
                         type="text" value={adForm.link} 
                         onChange={e => setAdForm({...adForm, link: e.target.value})}
-                        placeholder="مثال: # أو رابط موقع الجهة"
+                        placeholder="مثال: https://wa.me/... أو رقم هاتف أو رابط"
                         className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">ترتيب الظهور (الرقم الأصغر أولاً) *</label>
+                      <input 
+                        type="number" required min={1}
+                        value={adForm.displayOrder}
+                        onChange={e => setAdForm({...adForm, displayOrder: parseInt(e.target.value) || 1})}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">مدة عرض الإعلان بالثواني *</label>
+                      <input 
+                        type="number" required min={1}
+                        value={adForm.duration}
+                        onChange={e => setAdForm({...adForm, duration: parseInt(e.target.value) || 5})}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">لون الخلفية (كود هيكس أو فئة تايلوند) *</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="color" 
+                          value={adForm.backgroundColor.startsWith('#') && adForm.backgroundColor.length === 7 ? adForm.backgroundColor : '#059669'} 
+                          onChange={e => setAdForm({...adForm, backgroundColor: e.target.value})}
+                          className="h-9 w-9 shrink-0 border rounded cursor-pointer p-0.5 bg-white"
+                        />
+                        <input 
+                          type="text" required 
+                          value={adForm.backgroundColor} 
+                          onChange={e => setAdForm({...adForm, backgroundColor: e.target.value})}
+                          placeholder="مثال: #059669 أو bg-slate-900"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">لون النص (كود هيكس أو فئة تايلوند) *</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="color" 
+                          value={adForm.textColor.startsWith('#') && adForm.textColor.length === 7 ? adForm.textColor : '#ffffff'} 
+                          onChange={e => setAdForm({...adForm, textColor: e.target.value})}
+                          className="h-9 w-9 shrink-0 border rounded cursor-pointer p-0.5 bg-white"
+                        />
+                        <input 
+                          type="text" required 
+                          value={adForm.textColor} 
+                          onChange={e => setAdForm({...adForm, textColor: e.target.value})}
+                          placeholder="مثال: #ffffff أو text-slate-950"
+                          className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">تاريخ بداية النشر (اختياري)</label>
+                      <input 
+                        type="date" 
+                        value={adForm.startDate} 
+                        onChange={e => setAdForm({...adForm, startDate: e.target.value})}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">تاريخ نهاية النشر (اختياري)</label>
+                      <input 
+                        type="date" 
+                        value={adForm.endDate} 
+                        onChange={e => setAdForm({...adForm, endDate: e.target.value})}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">حالة تفعيل الإعلان *</label>
+                      <select 
+                        value={adForm.isActive ? 'true' : 'false'} 
+                        onChange={e => setAdForm({...adForm, isActive: e.target.value === 'true'})}
+                        className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
+                      >
+                        <option value="true">مفعل ونشط</option>
+                        <option value="false">معطل وغير نشط</option>
+                      </select>
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end pt-2">
@@ -4363,8 +4477,9 @@ export default function AdminPanel({
                 <table className="w-full text-right border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-150 text-xs font-extrabold text-slate-500">
-                      <th className="p-4">عنوان الإعلان</th>
-                      <th className="p-4">موضع الظهور</th>
+                      <th className="p-4">تفاصيل الإعلان</th>
+                      <th className="p-4">مكان الظهور</th>
+                      <th className="p-4">الترتيب والمدة</th>
                       <th className="p-4">الحالة</th>
                       <th className="p-4 text-left">إجراءات</th>
                     </tr>
@@ -4373,16 +4488,31 @@ export default function AdminPanel({
                     {ads.map((a) => (
                       <tr key={a.id} className="hover:bg-slate-50/55 transition-colors">
                         <td className="p-4">
-                          <div className="font-bold text-slate-800">{a.title}</div>
-                          <div className="text-xs text-slate-400 mt-1 truncate max-w-sm">{a.content}</div>
+                          <div className="font-bold text-slate-800 line-clamp-2 max-w-md">{a.content}</div>
+                          {a.link && a.link !== '#' && <div className="text-xs text-blue-500 mt-1 truncate max-w-xs">{a.link}</div>}
+                          {(a.startDate || a.endDate) && (
+                            <div className="text-[10px] text-slate-400 mt-1">
+                              الصلاحية: {a.startDate || 'بدون بداية'} إلى {a.endDate || 'بدون نهاية'}
+                            </div>
+                          )}
                         </td>
                         <td className="p-4 font-bold text-xs text-emerald-600">
-                          {a.position === 'top' ? 'بانر علوي' :
-                           a.position === 'bottom' ? 'بانر سفلي' :
-                           a.position === 'ticker' ? 'شريط متحرك' :
-                           a.position === 'search_middle' ? 'بين البحث' :
-                           a.position === 'card_doctor' ? 'كارت طبيب' :
-                           a.position === 'card_pharmacy' ? 'كارت صيدلية' : 'كارت معمل'}
+                          {a.position === 'top' ? 'أعلى الصفحة' :
+                           a.position === 'bottom' ? 'أسفل الصفحة' :
+                           a.position === 'before_doctors' ? 'قبل كشف الأطباء' :
+                           a.position === 'after_doctors' ? 'بعد كشف الأطباء' :
+                           a.position === 'before_pharmacies' ? 'قبل الصيدليات' :
+                           a.position === 'after_pharmacies' ? 'بعد الصيدليات' :
+                           a.position === 'before_labs' ? 'قبل المعامل' :
+                           a.position === 'after_labs' ? 'بعد المعامل' :
+                           a.position === 'ticker' ? 'شريط الأخبار (Ticker)' :
+                           a.position === 'search_middle' ? 'بين كشوف البحث' :
+                           a.position === 'card_doctor' ? 'كارت الطبيب' :
+                           a.position === 'card_pharmacy' ? 'كارت الصيدلية' : 'كارت المعمل'}
+                        </td>
+                        <td className="p-4 text-xs font-semibold text-slate-600">
+                          <div>الترتيب: {a.displayOrder || 1}</div>
+                          <div>المدة: {a.duration || 5} ث</div>
                         </td>
                         <td className="p-4">
                           <button
@@ -4402,11 +4532,17 @@ export default function AdminPanel({
                               onClick={() => {
                                 setEditingId(a.id);
                                 setAdForm({
-                                  title: a.title,
-                                  content: a.content,
-                                  link: a.link || '#',
-                                  position: a.position,
-                                  isActive: a.isActive
+                                  title: a.title || '',
+                                  content: a.content || '',
+                                  link: a.link || '',
+                                  position: a.position || 'top',
+                                  displayOrder: a.displayOrder !== undefined ? a.displayOrder : 1,
+                                  duration: a.duration !== undefined ? a.duration : 5,
+                                  backgroundColor: a.backgroundColor || '#059669',
+                                  textColor: a.textColor || '#ffffff',
+                                  isActive: a.isActive !== undefined ? a.isActive : true,
+                                  startDate: a.startDate || '',
+                                  endDate: a.endDate || ''
                                 });
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"

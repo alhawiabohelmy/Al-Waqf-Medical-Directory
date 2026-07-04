@@ -89,10 +89,14 @@ export interface Lab {
 
 export interface Ad {
   id: string;
-  title: string;
+  title?: string; // Optional title for backward compatibility
   content: string;
   link?: string;
-  position: 'top' | 'bottom' | 'search_middle' | 'card_doctor' | 'card_pharmacy' | 'card_lab' | 'ticker' | 'slider';
+  position: string; // e.g. 'top' | 'bottom' | 'before_doctors' | 'after_doctors' | 'before_pharmacies' | 'after_pharmacies' | 'before_labs' | 'after_labs'
+  displayOrder: number;
+  duration: number; // Duration in seconds
+  backgroundColor: string; // Hex color e.g. #059669
+  textColor: string; // Hex color e.g. #ffffff
   isActive: boolean;
   startDate?: string;
   endDate?: string;

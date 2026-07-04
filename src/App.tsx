@@ -16,6 +16,7 @@ import Navbar from './components/Navbar';
 import Ticker from './components/Ticker';
 import ListingCard from './components/ListingCard';
 import AdminPanel from './components/AdminPanel';
+import AdRotator from './components/AdRotator';
 import { checkActivityStatus } from './lib/activityStatus';
 
 // Data / Types
@@ -934,6 +935,11 @@ export default function App() {
 
       {/* 3. MAIN SITE CONTENT AREA */}
       <main className="flex-grow">
+        {activePage !== 'home' && activePage !== 'admin' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+            <AdRotator ads={ads} position="top" />
+          </div>
+        )}
         
         {/* === HOME PAGE (الرئيسية) === */}
         {activePage === 'home' && (
@@ -951,22 +957,11 @@ export default function App() {
                     />
                   );
                 case 'top-ad':
-                  return topBanner ? (
+                  return (
                     <div key={sectionId} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-                      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/60 rounded-3xl p-5 sm:p-6 text-center shadow-sm relative overflow-hidden">
-                        <div className="absolute -top-12 -right-12 h-32 w-32 bg-emerald-500/5 rounded-full blur-2xl"></div>
-                        <span className="inline-block bg-emerald-600 text-white font-extrabold text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-md mb-2">مساحة إعلانية مميزة</span>
-                        <h3 className="text-base sm:text-lg font-bold text-slate-900">{topBanner.title}</h3>
-                        <p className="text-slate-600 text-xs sm:text-sm mt-1.5 max-w-3xl mx-auto leading-relaxed">{topBanner.content}</p>
-                        {topBanner.link && topBanner.link !== '#' && (
-                          <a href={topBanner.link} className="mt-3.5 inline-flex items-center gap-1 text-xs text-emerald-600 font-bold hover:underline">
-                            <span>تواصل لمعرفة التفاصيل</span>
-                            <ArrowUpRight className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
+                      <AdRotator ads={ads} position="top" />
                     </div>
-                  ) : null;
+                  );
                 case 'hero':
                   return (
                     <div key={sectionId} className="relative pt-10 pb-4 bg-gradient-to-b from-white to-slate-50 overflow-hidden">
@@ -1086,22 +1081,11 @@ export default function App() {
                     </div>
                   );
                 case 'middle-ad':
-                  return bottomBanner ? (
+                  return (
                     <div key={sectionId} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                      <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white rounded-3xl p-5 sm:p-8 text-center shadow-md relative overflow-hidden">
-                        <div className="absolute top-0 right-0 h-24 w-24 bg-emerald-500/10 rounded-full blur-xl"></div>
-                        <span className="bg-emerald-600 text-white font-extrabold text-[9px] uppercase tracking-widest px-2 py-0.5 rounded mb-2 inline-block">حملات التوعية والإعلان</span>
-                        <h3 className="text-base sm:text-xl font-bold">{bottomBanner.title}</h3>
-                        <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-2xl mx-auto leading-relaxed font-semibold">{bottomBanner.content}</p>
-                        {bottomBanner.link && bottomBanner.link !== '#' && (
-                          <a href={bottomBanner.link} className="mt-3 inline-flex items-center gap-1 text-xs text-emerald-400 font-bold hover:underline">
-                             <span>اضغط لمزيد من التفاصيل والاتصال</span>
-                             <ArrowUpRight className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
+                      <AdRotator ads={ads} position="bottom" />
                     </div>
-                  ) : null;
+                  );
                 case 'stats':
                   return null;
                 case 'featured':
@@ -1359,33 +1343,30 @@ export default function App() {
               }
 
               return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filtered.map((doc, idx) => (
-                    <div key={doc.id} className="contents">
-                      <ListingCard 
-                        item={doc} 
-                        type="doctor" 
-                        ads={ads} 
-                        onShowToast={showToast} 
-                      />
+                <div className="space-y-6">
+                  <AdRotator ads={ads} position="before_doctors" />
 
-                      {/* Sponsor ad between search results (rendered e.g. after index 2) */}
-                      {idx === 2 && searchMiddleAd && (
-                        <div className="md:col-span-2 lg:col-span-3 my-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-                          <div className="text-right">
-                            <span className="bg-emerald-600 text-white font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded mb-1.5 inline-block">حملة مدعومة</span>
-                            <h4 className="font-bold text-slate-900 text-base">{searchMiddleAd.title}</h4>
-                            <p className="text-xs text-slate-600 mt-1 max-w-xl font-medium leading-relaxed">{searchMiddleAd.content}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filtered.map((doc, idx) => (
+                      <div key={doc.id} className="contents">
+                        <ListingCard 
+                          item={doc} 
+                          type="doctor" 
+                          ads={ads} 
+                          onShowToast={showToast} 
+                        />
+
+                        {/* Sponsor ad between search results (rendered e.g. after index 2) */}
+                        {idx === 2 && (
+                          <div className="md:col-span-2 lg:col-span-3 my-4">
+                            <AdRotator ads={ads} position="search_middle" />
                           </div>
-                          {searchMiddleAd.link && (
-                            <a href={searchMiddleAd.link} className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-sm transition-colors">
-                              اعرف المزيد
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <AdRotator ads={ads} position="after_doctors" />
                 </div>
               );
             })()}
@@ -1577,16 +1558,22 @@ export default function App() {
               }
 
               return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filtered.map((pharm) => (
-                    <ListingCard 
-                      key={pharm.id}
-                      item={pharm} 
-                      type="pharmacy" 
-                      ads={ads} 
-                      onShowToast={showToast} 
-                    />
-                  ))}
+                <div className="space-y-6">
+                  <AdRotator ads={ads} position="before_pharmacies" />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filtered.map((pharm) => (
+                      <ListingCard 
+                        key={pharm.id}
+                        item={pharm} 
+                        type="pharmacy" 
+                        ads={ads} 
+                        onShowToast={showToast} 
+                      />
+                    ))}
+                  </div>
+
+                  <AdRotator ads={ads} position="after_pharmacies" />
                 </div>
               );
             })()}
@@ -1778,16 +1765,22 @@ export default function App() {
               }
 
               return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filtered.map((lab) => (
-                    <ListingCard 
-                      key={lab.id}
-                      item={lab} 
-                      type="lab" 
-                      ads={ads} 
-                      onShowToast={showToast} 
-                    />
-                  ))}
+                <div className="space-y-6">
+                  <AdRotator ads={ads} position="before_labs" />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filtered.map((lab) => (
+                      <ListingCard 
+                        key={lab.id}
+                        item={lab} 
+                        type="lab" 
+                        ads={ads} 
+                        onShowToast={showToast} 
+                      />
+                    ))}
+                  </div>
+
+                  <AdRotator ads={ads} position="after_labs" />
                 </div>
               );
             })()}
@@ -2779,6 +2772,11 @@ export default function App() {
           />
         )}
 
+        {activePage !== 'home' && activePage !== 'admin' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-6">
+            <AdRotator ads={ads} position="bottom" />
+          </div>
+        )}
       </main>
 
       {/* 4. WEBSITE FOOTER */}

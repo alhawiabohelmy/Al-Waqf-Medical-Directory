@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Volume2, ArrowUpRight } from 'lucide-react';
 import { Ad } from '../data/initialData';
 
@@ -11,17 +11,44 @@ interface TickerProps {
 export default function Ticker({ ads, speed = 4 }: TickerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const activeTickerAds = ads.filter(ad => ad.isActive && ad.position === 'ticker');
+  // Filter ads by position 'ticker', activity, and date range validity
+  const activeTickerAds = ads
+    .filter((ad) => {
+      if (!ad.isActive || ad.position !== 'ticker') return false;
+
+      const now = new Date();
+      if (ad.startDate) {
+        const start = new Date(ad.startDate);
+        if (!isNaN(start.getTime()) && start > now) return false;
+      }
+      if (ad.endDate) {
+        const end = new Date(ad.endDate);
+        end.setHours(23, 59, 59, 999);
+        if (!isNaN(end.getTime()) && end < now) return false;
+      }
+      return true;
+    })
+    // Sort by display order ascending
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+
+  // Reset current index if ads list changes
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [activeTickerAds.length]);
 
   useEffect(() => {
     if (activeTickerAds.length <= 1) return;
 
-    const interval = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % activeTickerAds.length);
-    }, speed * 1000);
+    const currentAd = activeTickerAds[currentIndex];
+    // use individual ad duration or fallback to speed
+    const durationSeconds = currentAd?.duration && currentAd.duration > 0 ? currentAd.duration : speed;
 
-    return () => clearInterval(interval);
-  }, [activeTickerAds.length, speed]);
+    const timer = setTimeout(() => {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % activeTickerAds.length);
+    }, durationSeconds * 1000);
+
+    return () => clearTimeout(timer);
+  }, [currentIndex, activeTickerAds.length, activeTickerAds, speed]);
 
   if (activeTickerAds.length === 0) {
     return (
@@ -34,13 +61,26 @@ export default function Ticker({ ads, speed = 4 }: TickerProps) {
 
   const currentAd = activeTickerAds[currentIndex];
 
+  const isHex = (color: string) => color && (color.startsWith('#') || color.startsWith('rgb'));
+
+  const containerStyle: React.CSSProperties = {
+    backgroundColor: isHex(currentAd.backgroundColor) ? currentAd.backgroundColor : undefined,
+    color: isHex(currentAd.textColor) ? currentAd.textColor : undefined,
+  };
+
+  const containerClass = `
+    border-b py-3 relative overflow-hidden shadow-inner transition-all duration-300
+    ${!isHex(currentAd.backgroundColor) ? currentAd.backgroundColor || 'bg-emerald-600' : ''}
+    ${!isHex(currentAd.textColor) ? currentAd.textColor || 'text-white' : ''}
+  `;
+
   return (
-    <div className="bg-emerald-600 text-white border-b border-emerald-700 py-3 relative overflow-hidden shadow-inner" id="news-ticker">
+    <div className={containerClass} style={containerStyle} id="news-ticker">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
         
         {/* Label Badge */}
-        <div className="flex items-center gap-1.5 shrink-0 bg-emerald-800 text-emerald-100 text-[11px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md shadow-sm border border-emerald-700">
-          <Volume2 className="h-3.5 w-3.5 animate-pulse text-emerald-300" />
+        <div className="flex items-center gap-1.5 shrink-0 bg-black/25 text-white text-[11px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md shadow-sm border border-white/10">
+          <Volume2 className="h-3.5 w-3.5 animate-pulse text-white" />
           <span>تنويه وهام</span>
         </div>
 
@@ -48,18 +88,22 @@ export default function Ticker({ ads, speed = 4 }: TickerProps) {
         <div className="flex-1 text-right overflow-hidden relative h-5 flex items-center">
           <div 
             key={currentAd.id}
-            className="text-sm font-semibold text-emerald-50 hover:text-white transition-all duration-300 animate-slideUp truncate w-full flex items-center gap-2 justify-start"
+            className="text-sm font-semibold transition-all duration-300 animate-slideUp truncate w-full flex items-center gap-2 justify-start"
           >
-            <span className="font-bold underline text-white shrink-0">{currentAd.title}:</span>
+            {currentAd.title && (
+              <span className="font-bold underline shrink-0">{currentAd.title}:</span>
+            )}
             <span className="opacity-95">{currentAd.content}</span>
           </div>
         </div>
 
         {/* Dynamic Action Button for Ad */}
-        {currentAd.link && (
+        {currentAd.link && currentAd.link !== '#' && (
           <a
             href={currentAd.link}
-            className="shrink-0 text-xs bg-emerald-750 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-lg flex items-center gap-1 transition-all border border-emerald-500/30"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-xs bg-white/20 hover:bg-white/30 text-white font-bold py-1 px-3 rounded-lg flex items-center gap-1 transition-all border border-white/10"
           >
             <span>التفاصيل</span>
             <ArrowUpRight className="h-3 w-3" />

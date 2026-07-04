@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Phone, MapPin, Share2, Printer, Check, Copy, AlertCircle, Stethoscope, Pill, FlaskConical, Award, Clock } from 'lucide-react';
 import { Doctor, Pharmacy, Lab, Ad } from '../data/initialData';
 import { checkActivityStatus } from '../lib/activityStatus';
+import AdRotator from './AdRotator';
 
 interface ListingCardProps {
   key?: any;
@@ -289,15 +290,12 @@ ${item.whatsapp ? `💬 *واتساب:* +${item.whatsapp}` : ''}
           </div>
 
           {/* Ad banner in the card if active */}
-          {activeAd && (
-            <div className={`mt-4 pt-3.5 px-3 py-2.5 rounded-xl text-[11.5px] flex flex-col gap-1 shadow-inner ${style.adBox}`}>
-              <div className="flex items-center gap-1 font-bold text-xs">
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${style.adBadge}`}>إعلان ممول</span>
-                <span className={style.adTitle}>{activeAd.title}</span>
-              </div>
-              <p className="opacity-90 leading-relaxed font-semibold">{activeAd.content}</p>
-            </div>
-          )}
+          <div className="mt-4">
+            <AdRotator 
+              ads={ads} 
+              position={type === 'doctor' ? 'card_doctor' : type === 'pharmacy' ? 'card_pharmacy' : 'card_lab'} 
+            />
+          </div>
 
           {/* Last Updated Timestamp */}
           {item.lastUpdated && (
